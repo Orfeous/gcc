@@ -1,5 +1,5 @@
 /* Conditional Dead Call Elimination pass for the GNU compiler.
-   Copyright (C) 2008-2016 Free Software Foundation, Inc.
+   Copyright (C) 2008-2019 Free Software Foundation, Inc.
    Contributed by Xinliang David Li <davidxl@google.com>
 
 This file is part of GCC.
@@ -172,7 +172,7 @@ check_target_format (tree arg)
       || (mode == DFmode
 	  && (rfmt == &ieee_double_format || rfmt == &mips_double_format
 	      || rfmt == &motorola_double_format))
-      /* For long double, we can not really check XFmode
+      /* For long double, we cannot really check XFmode
          which is only defined on intel platforms.
          Candidate pre-selection using builtin function
          code guarantees that we are checking formats
@@ -314,6 +314,7 @@ can_test_argument_range (gcall *call)
     CASE_FLT_FN (BUILT_IN_POW10):
     /* Sqrt.  */
     CASE_FLT_FN (BUILT_IN_SQRT):
+    CASE_FLT_FN_FLOATN_NX (BUILT_IN_SQRT):
       return check_builtin_call (call);
     /* Special one: two argument pow.  */
     case BUILT_IN_POW:
@@ -342,6 +343,7 @@ edom_only_function (gcall *call)
     CASE_FLT_FN (BUILT_IN_SIGNIFICAND):
     CASE_FLT_FN (BUILT_IN_SIN):
     CASE_FLT_FN (BUILT_IN_SQRT):
+    CASE_FLT_FN_FLOATN_NX (BUILT_IN_SQRT):
     CASE_FLT_FN (BUILT_IN_FMOD):
     CASE_FLT_FN (BUILT_IN_REMAINDER):
       return true;
@@ -360,6 +362,40 @@ can_guard_call_p (gimple *call)
 	  || find_fallthru_edge (gimple_bb (call)->succs));
 }
 
+/* For a comparison code return the comparison code we should use if we don't
+   HONOR_NANS.  */
+
+static enum tree_code
+comparison_code_if_no_nans (tree_code code)
+{
+  switch (code)
+    {
+    case UNLT_EXPR:
+      return LT_EXPR;
+    case UNGT_EXPR:
+      return GT_EXPR;
+    case UNLE_EXPR:
+      return LE_EXPR;
+    case UNGE_EXPR:
+      return GE_EXPR;
+    case UNEQ_EXPR:
+      return EQ_EXPR;
+    case LTGT_EXPR:
+      return NE_EXPR;
+
+    case LT_EXPR:
+    case GT_EXPR:
+    case LE_EXPR:
+    case GE_EXPR:
+    case EQ_EXPR:
+    case NE_EXPR:
+      return code;
+
+    default:
+      gcc_unreachable ();
+    }
+}
+
 /* A helper function to generate gimple statements for one bound
    comparison, so that the built-in function is called whenever
    TCODE <ARG, LBUB> is *false*.  TEMP_NAME1/TEMP_NAME2 are names
@@ -376,6 +412,9 @@ gen_one_condition (tree arg, int lbub,
 		   vec<gimple *> conds,
                    unsigned *nconds)
 {
+  if (!HONOR_NANS (arg))
+    tcode = comparison_code_if_no_nans (tcode);
+
   tree lbub_real_cst, lbub_cst, float_type;
   tree temp, tempn, tempc, tempcn;
   gassign *stmt1;
@@ -703,6 +742,7 @@ get_no_error_domain (enum built_in_function fnc)
                          308, true, false);
     /* sqrt: [0, +inf)  */
     CASE_FLT_FN (BUILT_IN_SQRT):
+    CASE_FLT_FN_FLOATN_NX (BUILT_IN_SQRT):
       return get_domain (0, true, true,
                          0, false, false);
     default:
@@ -734,7 +774,7 @@ gen_shrink_wrap_conditions (gcall *bi_call, vec<gimple *> conds,
 
   call = bi_call;
   fn = gimple_call_fndecl (call);
-  gcc_assert (fn && DECL_BUILT_IN (fn));
+  gcc_assert (fn && fndecl_built_in_p (fn));
   fnc = DECL_FUNCTION_CODE (fn);
   *nconds = 0;
 
@@ -751,10 +791,6 @@ gen_shrink_wrap_conditions (gcall *bi_call, vec<gimple *> conds,
 
   return;
 }
-
-
-/* Probability of the branch (to the call) is taken.  */
-#define ERR_PROB 0.01
 
 /* Shrink-wrap BI_CALL so that it is only called when one of the NCONDS
    conditions in CONDS is false.  */
@@ -811,7 +847,18 @@ shrink_wrap_one_built_in_call_with_conds (gcall *bi_call, vec <gimple *> conds,
       if (EDGE_COUNT (join_tgt_in_edge_from_call->dest->preds) > 1)
 	join_tgt_bb = split_edge (join_tgt_in_edge_from_call);
       else
-	join_tgt_bb = join_tgt_in_edge_from_call->dest;
+	{
+	  join_tgt_bb = join_tgt_in_edge_from_call->dest;
+	  /* We may have degenerate PHIs in the destination.  Propagate
+	     those out.  */
+	  for (gphi_iterator i = gsi_start_phis (join_tgt_bb); !gsi_end_p (i);)
+	    {
+	      gphi *phi = i.phi ();
+	      replace_uses_by (gimple_phi_result (phi),
+			       gimple_phi_arg_def (phi, 0));
+	      remove_phi_node (&i, true);
+	    }
+	}
     }
   else
     {
@@ -836,9 +883,11 @@ shrink_wrap_one_built_in_call_with_conds (gcall *bi_call, vec <gimple *> conds,
       gsi_insert_before (&bi_call_bsi, c, GSI_SAME_STMT);
       cond_expr = c;
     }
-  nconds--;
   ci++;
   gcc_assert (cond_expr && gimple_code (cond_expr) == GIMPLE_COND);
+
+  typedef std::pair<edge, edge> edge_pair;
+  auto_vec<edge_pair, 8> edges;
 
   bi_call_in_edge0 = split_block (bi_call_bb, cond_expr);
   bi_call_in_edge0->flags &= ~EDGE_FALLTHRU;
@@ -848,17 +897,11 @@ shrink_wrap_one_built_in_call_with_conds (gcall *bi_call, vec <gimple *> conds,
   join_tgt_in_edge_fall_thru = make_edge (guard_bb, join_tgt_bb,
                                           EDGE_TRUE_VALUE);
 
-  bi_call_in_edge0->probability = REG_BR_PROB_BASE * ERR_PROB;
-  bi_call_in_edge0->count =
-      apply_probability (guard_bb->count,
-			 bi_call_in_edge0->probability);
-  join_tgt_in_edge_fall_thru->probability =
-      inverse_probability (bi_call_in_edge0->probability);
-  join_tgt_in_edge_fall_thru->count =
-      guard_bb->count - bi_call_in_edge0->count;
+  edges.reserve (nconds);
+  edges.quick_push (edge_pair (bi_call_in_edge0, join_tgt_in_edge_fall_thru));
 
   /* Code generation for the rest of the conditions  */
-  while (nconds > 0)
+  for (unsigned int i = 1; i < nconds; ++i)
     {
       unsigned ci0;
       edge bi_call_in_edge;
@@ -874,7 +917,6 @@ shrink_wrap_one_built_in_call_with_conds (gcall *bi_call, vec <gimple *> conds,
           gsi_insert_before (&guard_bsi, c, GSI_SAME_STMT);
           cond_expr = c;
         }
-      nconds--;
       ci++;
       gcc_assert (cond_expr && gimple_code (cond_expr) == GIMPLE_COND);
       guard_bb_in_edge = split_block (guard_bb, cond_expr);
@@ -882,14 +924,41 @@ shrink_wrap_one_built_in_call_with_conds (gcall *bi_call, vec <gimple *> conds,
       guard_bb_in_edge->flags |= EDGE_TRUE_VALUE;
 
       bi_call_in_edge = make_edge (guard_bb, bi_call_bb, EDGE_FALSE_VALUE);
+      edges.quick_push (edge_pair (bi_call_in_edge, guard_bb_in_edge));
+    }
 
-      bi_call_in_edge->probability = REG_BR_PROB_BASE * ERR_PROB;
-      bi_call_in_edge->count =
-	  apply_probability (guard_bb->count,
-			     bi_call_in_edge->probability);
-      guard_bb_in_edge->probability =
-          inverse_probability (bi_call_in_edge->probability);
-      guard_bb_in_edge->count = guard_bb->count - bi_call_in_edge->count;
+  /* Now update the probability and profile information, processing the
+     guards in order of execution.
+
+     There are two approaches we could take here.  On the one hand we
+     could assign a probability of X to the call block and distribute
+     that probability among its incoming edges.  On the other hand we
+     could assign a probability of X to each individual call edge.
+
+     The choice only affects calls that have more than one condition.
+     In those cases, the second approach would give the call block
+     a greater probability than the first.  However, the difference
+     is only small, and our chosen X is a pure guess anyway.
+
+     Here we take the second approach because it's slightly simpler
+     and because it's easy to see that it doesn't lose profile counts.  */
+  bi_call_bb->count = profile_count::zero ();
+  while (!edges.is_empty ())
+    {
+      edge_pair e = edges.pop ();
+      edge call_edge = e.first;
+      edge nocall_edge = e.second;
+      basic_block src_bb = call_edge->src;
+      gcc_assert (src_bb == nocall_edge->src);
+
+      call_edge->probability = profile_probability::very_unlikely ();
+      nocall_edge->probability = profile_probability::always ()
+				 - call_edge->probability;
+
+      bi_call_bb->count += call_edge->count ();
+
+      if (nocall_edge->dest != join_tgt_bb)
+	nocall_edge->dest->count = src_bb->count - bi_call_bb->count;
     }
 
   if (dom_info_available_p (CDI_DOMINATORS))
@@ -979,6 +1048,7 @@ use_internal_fn (gcall *call)
     args.safe_push (gimple_call_arg (call, i));
   gcall *new_call = gimple_build_call_internal_vec (ifn, args);
   gimple_set_location (new_call, gimple_location (call));
+  gimple_call_set_nothrow (new_call, gimple_call_nothrow_p (call));
 
   /* Transfer the LHS to the new call.  */
   tree lhs = gimple_call_lhs (call);

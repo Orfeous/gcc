@@ -1,5 +1,5 @@
 /* Loop splitting.
-   Copyright (C) 2015 Free Software Foundation, Inc.
+   Copyright (C) 2015-2019 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -159,7 +159,7 @@ patch_loop_exit (struct loop *loop, gcond *guard, tree nextval, tree newbound,
 			     nextval, newbound);
   update_stmt (stmt);
 
-  edge stay = single_pred_edge (loop->latch);
+  edge stay = EDGE_SUCC (exit->src, EDGE_SUCC (exit->src, 0) == exit);
 
   exit->flags &= ~(EDGE_TRUE_VALUE | EDGE_FALSE_VALUE);
   stay->flags &= ~(EDGE_TRUE_VALUE | EDGE_FALSE_VALUE);
@@ -353,11 +353,8 @@ connect_loops (struct loop *loop1, struct loop *loop2)
       new_e->flags |= EDGE_TRUE_VALUE;
     }
 
-  new_e->count = skip_bb->count;
-  new_e->probability = PROB_LIKELY;
-  new_e->count = apply_probability (skip_e->count, PROB_LIKELY);
-  skip_e->count -= new_e->count;
-  skip_e->probability = inverse_probability (PROB_LIKELY);
+  new_e->probability = profile_probability::likely ();
+  skip_e->probability = new_e->probability.invert ();
 
   return new_e;
 }
@@ -436,7 +433,6 @@ compute_new_first_bound (gimple_seq *stmts, struct tree_niter_desc *niter,
   if (POINTER_TYPE_P (TREE_TYPE (guard_init)))
     {
       enddiff = gimple_convert (stmts, sizetype, enddiff);
-      enddiff = gimple_build (stmts, NEGATE_EXPR, sizetype, enddiff);
       newbound = gimple_build (stmts, POINTER_PLUS_EXPR,
 			       TREE_TYPE (guard_init),
 			       guard_init, enddiff);
@@ -497,7 +493,7 @@ split_loop (struct loop *loop1, struct tree_niter_desc *niter)
   unsigned i;
   bool changed = false;
   tree guard_iv;
-  tree border;
+  tree border = NULL_TREE;
   affine_iv iv;
 
   bbs = get_loop_body (loop1);
@@ -560,9 +556,13 @@ split_loop (struct loop *loop1, struct tree_niter_desc *niter)
 	   them, and fix up SSA form for that.  */
 	initialize_original_copy_tables ();
 	basic_block cond_bb;
+
 	struct loop *loop2 = loop_version (loop1, cond, &cond_bb,
-					   REG_BR_PROB_BASE, REG_BR_PROB_BASE,
-					   REG_BR_PROB_BASE, true);
+					   profile_probability::always (),
+					   profile_probability::always (),
+					   profile_probability::always (),
+					   profile_probability::always (),
+					   true);
 	gcc_assert (loop2);
 	update_ssa (TODO_update_ssa);
 
@@ -649,7 +649,8 @@ tree_ssa_split_loops (void)
 					false, true)
 	  && niter.cmp != ERROR_MARK
 	  /* We can't yet handle loops controlled by a != predicate.  */
-	  && niter.cmp != NE_EXPR)
+	  && niter.cmp != NE_EXPR
+	  && can_duplicate_loop_p (loop))
 	{
 	  if (split_loop (loop, &niter))
 	    {

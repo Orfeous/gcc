@@ -34,15 +34,16 @@ go_create_gogo(const struct go_create_gogo_args* args)
 
   if (args->relative_import_path != NULL)
     ::gogo->set_relative_import_path(args->relative_import_path);
-  if (args->check_divide_by_zero)
-    ::gogo->set_check_divide_by_zero(args->check_divide_by_zero);
-  if (args->check_divide_overflow)
-    ::gogo->set_check_divide_overflow(args->check_divide_overflow);
+  ::gogo->set_check_divide_by_zero(args->check_divide_by_zero);
+  ::gogo->set_check_divide_overflow(args->check_divide_overflow);
   if (args->compiling_runtime)
     ::gogo->set_compiling_runtime(args->compiling_runtime);
   if (args->c_header != NULL)
     ::gogo->set_c_header(args->c_header);
   ::gogo->set_debug_escape_level(args->debug_escape_level);
+  if (args->debug_escape_hash != NULL)
+    ::gogo->set_debug_escape_hash(args->debug_escape_hash);
+  ::gogo->set_nil_check_size_threshold(args->nil_check_size_threshold);
 }
 
 // Parse the input files.
@@ -96,8 +97,6 @@ go_parse_input_files(const char** filenames, unsigned int filename_count,
 	}
     }
 
-  ::gogo->linemap()->stop();
-
   ::gogo->clear_file_scope();
 
   // If the global predeclared names are referenced but not defined,
@@ -121,6 +120,10 @@ go_parse_input_files(const char** filenames, unsigned int filename_count,
   // form which is easier to use.
   ::gogo->lower_parse_tree();
 
+  // At this point we have handled all inline functions, so we no
+  // longer need the linemap.
+  ::gogo->linemap()->stop();
+
   // Create function descriptors as needed.
   ::gogo->create_function_descriptors();
 
@@ -142,11 +145,11 @@ go_parse_input_files(const char** filenames, unsigned int filename_count,
   // Export global identifiers as appropriate.
   ::gogo->do_exports();
 
-  // Turn short-cut operators (&&, ||) into explicit if statements.
-  ::gogo->remove_shortcuts();
-
   // Use temporary variables to force order of evaluation.
   ::gogo->order_evaluations();
+
+  // Turn short-cut operators (&&, ||) into explicit if statements.
+  ::gogo->remove_shortcuts();
 
   // Convert named types to backend representation.
   ::gogo->convert_named_types();
@@ -160,8 +163,14 @@ go_parse_input_files(const char** filenames, unsigned int filename_count,
   // Write out queued up functions for hash and comparison of types.
   ::gogo->write_specific_type_functions();
 
+  // Add write barriers.
+  ::gogo->add_write_barriers();
+
   // Flatten the parse tree.
   ::gogo->flatten();
+
+  // Reclaim memory of escape analysis Nodes.
+  ::gogo->reclaim_escape_nodes();
 
   // Dump ast, use filename[0] as the base name
   ::gogo->dump_ast(filenames[0]);

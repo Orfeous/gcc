@@ -4,6 +4,7 @@
 /* { dg-do compile } */
 /* { dg-require-effective-target powerpc_p8vector_ok } */
 /* { dg-options "-maltivec -mvsx -mpower8-vector" } */
+/* { dg-additional-options "-maix64" { target powerpc-ibm-aix* } } */
 
 #include <altivec.h>
 
@@ -19,5 +20,5 @@ test6 (vector unsigned long long x, vector unsigned long long y)
   return vec_mul (x, y);
 }
 
-/* { dg-final { scan-assembler-times "\[ \t\]mulld " 4 } } */
+/* { dg-final { scan-assembler-times "\[ \t\]mulld " 4 { target lp64 } } } */
 

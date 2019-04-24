@@ -1,5 +1,5 @@
 /* MD reader definitions.
-   Copyright (C) 1987-2016 Free Software Foundation, Inc.
+   Copyright (C) 1987-2019 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -91,6 +91,48 @@ struct enum_type {
   unsigned int num_values;
 };
 
+/* Describes one instance of an overloaded_name.  */
+struct overloaded_instance {
+  /* The next instance in the chain, or null if none.  */
+  overloaded_instance *next;
+
+  /* The values that the overloaded_name arguments should have for this
+     instance to be chosen.  Each value is a C token.  */
+  vec<const char *> arg_values;
+
+  /* The full (non-overloaded) name of the pattern.  */
+  const char *name;
+
+  /* The corresponding define_expand or define_insn.  */
+  rtx insn;
+};
+
+/* Describes a define_expand or define_insn whose name was preceded by '@'.
+   Overloads are uniquely determined by their name and the types of their
+   arguments; it's possible to have overloads with the same name but
+   different argument types.  */
+struct overloaded_name {
+  /* The next overloaded name in the chain.  */
+  overloaded_name *next;
+
+  /* The overloaded name (i.e. the name with "@" character and
+     "<...>" placeholders removed).  */
+  const char *name;
+
+  /* The C types of the iterators that determine the underlying pattern,
+     in the same order as in the pattern name.  E.g. "<mode>" in the
+     pattern name would give a "machine_mode" argument here.  */
+  vec<const char *> arg_types;
+
+  /* The first instance associated with this overloaded_name.  */
+  overloaded_instance *first_instance;
+
+  /* Where to chain new overloaded_instances.  */
+  overloaded_instance **next_instance_ptr;
+};
+
+struct mapping;
+
 /* A class for reading .md files and RTL dump files.
 
    Implemented in read-md.c.
@@ -106,10 +148,14 @@ struct enum_type {
 class md_reader
 {
  public:
-  md_reader ();
+  md_reader (bool compact);
   virtual ~md_reader ();
 
   bool read_md_files (int, const char **, bool (*) (const char *));
+  bool read_file (const char *filename);
+  bool read_file_fragment (const char *filename,
+			   int first_line,
+			   int last_line);
 
   /* A hook that handles a single .md-file directive, up to but not
      including the closing ')'.  It takes two arguments: the file position
@@ -119,10 +165,13 @@ class md_reader
 
   file_location get_current_location () const;
 
+  bool is_compact () const { return m_compact; }
+
   /* Defined in read-md.c.  */
   int read_char (void);
   void unread_char (int ch);
-  void read_name (struct md_name *name);
+  file_location read_name (struct md_name *name);
+  file_location read_name_or_nil (struct md_name *);
   void read_escape ();
   char *read_quoted_string ();
   char *read_braced_string ();
@@ -155,8 +204,10 @@ class md_reader
   rtx copy_rtx_for_iterators (rtx original);
   void read_conditions ();
   void record_potential_iterator_use (struct iterator_group *group,
-				      void *ptr, const char *name);
+				      rtx x, unsigned int index,
+				      const char *name);
   struct mapping *read_mapping (struct iterator_group *group, htab_t table);
+  overloaded_name *handle_overloaded_name (rtx, vec<mapping *> *);
 
   const char *get_top_level_filename () const { return m_toplevel_fname; }
   const char *get_filename () const { return m_read_md_filename; }
@@ -165,6 +216,8 @@ class md_reader
 
   struct obstack *get_string_obstack () { return &m_string_obstack; }
   htab_t get_md_constants () { return m_md_constants; }
+
+  overloaded_name *get_overloads () const { return m_first_overload; }
 
  private:
   /* A singly-linked list of filenames.  */
@@ -179,7 +232,12 @@ class md_reader
   void handle_include (file_location loc);
   void add_include_path (const char *arg);
 
+  bool read_name_1 (struct md_name *name, file_location *out_loc);
+
  private:
+  /* Are we reading a compact dump?  */
+  bool m_compact;
+
   /* The name of the toplevel file that indirectly included
      m_read_md_file.  */
   const char *m_toplevel_fname;
@@ -236,6 +294,20 @@ class md_reader
 
   /* A table of enum_type structures, hashed by name.  */
   htab_t m_enum_types;
+
+  /* If non-zero, filter the input to just this subset of lines.  */
+  int m_first_line;
+  int m_last_line;
+
+  /* The first overloaded_name.  */
+  overloaded_name *m_first_overload;
+
+  /* Where to chain further overloaded_names,  */
+  overloaded_name **m_next_overload_ptr;
+
+  /* A hash table of overloaded_names, keyed off their name and the types of
+     their arguments.  */
+  htab_t m_overloads_htab;
 };
 
 /* Global singleton; constrast with rtx_reader_ptr below.  */
@@ -247,7 +319,7 @@ extern md_reader *md_reader_ptr;
 class noop_reader : public md_reader
 {
  public:
-  noop_reader () : md_reader () {}
+  noop_reader () : md_reader (false) {}
 
   /* A dummy implementation which skips unknown directives.  */
   void handle_unknown_directive (file_location, const char *);
@@ -261,14 +333,30 @@ class noop_reader : public md_reader
 class rtx_reader : public md_reader
 {
  public:
-  rtx_reader ();
+  rtx_reader (bool compact);
   ~rtx_reader ();
 
   bool read_rtx (const char *rtx_name, vec<rtx> *rtxen);
   rtx read_rtx_code (const char *code_name);
-  void read_rtx_operand (rtx return_rtx, int idx);
+  virtual rtx read_rtx_operand (rtx return_rtx, int idx);
   rtx read_nested_rtx ();
   rtx read_rtx_variadic (rtx form);
+  char *read_until (const char *terminator_chars, bool consume_terminator);
+
+  virtual void handle_any_trailing_information (rtx) {}
+  virtual rtx postprocess (rtx x) { return x; }
+
+  /* Hook to allow function_reader subclass to put STRINGBUF into gc-managed
+     memory, rather than within an obstack.
+     This base class implementation is a no-op.  */
+  virtual const char *finalize_string (char *stringbuf) { return stringbuf; }
+
+ protected:
+  /* Analogous to rtx_writer's m_in_call_function_usage.  */
+  bool m_in_call_function_usage;
+
+  /* Support for "reuse_rtx" directives.  */
+  auto_vec<rtx> m_reuse_rtx_by_id;
 };
 
 /* Global singleton; constrast with md_reader_ptr above.  */

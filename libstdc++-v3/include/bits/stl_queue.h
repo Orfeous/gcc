@@ -1,6 +1,6 @@
 // Queue implementation -*- C++ -*-
 
-// Copyright (C) 2001-2016 Free Software Foundation, Inc.
+// Copyright (C) 2001-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -95,43 +95,55 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
   template<typename _Tp, typename _Sequence = deque<_Tp> >
     class queue
     {
+#ifdef _GLIBCXX_CONCEPT_CHECKS
       // concept requirements
       typedef typename _Sequence::value_type _Sequence_value_type;
+# if __cplusplus < 201103L
       __glibcxx_class_requires(_Tp, _SGIAssignableConcept)
+# endif
       __glibcxx_class_requires(_Sequence, _FrontInsertionSequenceConcept)
       __glibcxx_class_requires(_Sequence, _BackInsertionSequenceConcept)
       __glibcxx_class_requires2(_Tp, _Sequence_value_type, _SameTypeConcept)
+#endif
 
       template<typename _Tp1, typename _Seq1>
-        friend bool
-        operator==(const queue<_Tp1, _Seq1>&, const queue<_Tp1, _Seq1>&);
+	friend bool
+	operator==(const queue<_Tp1, _Seq1>&, const queue<_Tp1, _Seq1>&);
 
       template<typename _Tp1, typename _Seq1>
-        friend bool
-        operator<(const queue<_Tp1, _Seq1>&, const queue<_Tp1, _Seq1>&);
+	friend bool
+	operator<(const queue<_Tp1, _Seq1>&, const queue<_Tp1, _Seq1>&);
 
 #if __cplusplus >= 201103L
       template<typename _Alloc>
 	using _Uses = typename
 	  enable_if<uses_allocator<_Sequence, _Alloc>::value>::type;
-#endif
+
+#if __cplusplus >= 201703L
+      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+      // 2566. Requirements on the first template parameter of container
+      // adaptors
+      static_assert(is_same<_Tp, typename _Sequence::value_type>::value,
+	  "value_type must be the same as the underlying container");
+#endif // C++17
+#endif // C++11
 
     public:
-      typedef typename _Sequence::value_type                value_type;
-      typedef typename _Sequence::reference                 reference;
-      typedef typename _Sequence::const_reference           const_reference;
-      typedef typename _Sequence::size_type                 size_type;
-      typedef          _Sequence                            container_type;
+      typedef typename	_Sequence::value_type		value_type;
+      typedef typename	_Sequence::reference		reference;
+      typedef typename	_Sequence::const_reference	const_reference;
+      typedef typename	_Sequence::size_type		size_type;
+      typedef		_Sequence			container_type;
 
     protected:
-      /**
-       *  'c' is the underlying container.  Maintainers wondering why
-       *  this isn't uglified as per style guidelines should note that
-       *  this name is specified in the standard, [23.2.3.1].  (Why?
-       *  Presumably for the same reason that it's protected instead
+      /*  Maintainers wondering why this isn't uglified as per style
+       *  guidelines should note that this name is specified in the standard,
+       *  C++98 [23.2.3.1].
+       *  (Why? Presumably for the same reason that it's protected instead
        *  of private: to allow derivation.  But none of the other
        *  containers allow for derivation.  Odd.)
        */
+       ///  @c c is the underlying container.
       _Sequence c;
 
     public:
@@ -143,12 +155,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       queue(const _Sequence& __c = _Sequence())
       : c(__c) { }
 #else
+      template<typename _Seq = _Sequence, typename _Requires = typename
+	       enable_if<is_default_constructible<_Seq>::value>::type>
+	queue()
+	: c() { }
+
       explicit
       queue(const _Sequence& __c)
       : c(__c) { }
 
       explicit
-      queue(_Sequence&& __c = _Sequence())
+      queue(_Sequence&& __c)
       : c(std::move(__c)) { }
 
       template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
@@ -176,7 +193,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       /**
        *  Returns true if the %queue is empty.
        */
-      bool
+      _GLIBCXX_NODISCARD bool
       empty() const
       { return c.empty(); }
 
@@ -254,8 +271,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	{ return c.emplace_back(std::forward<_Args>(__args)...); }
 #else
       template<typename... _Args>
-        void
-        emplace(_Args&&... __args)
+	void
+	emplace(_Args&&... __args)
 	{ c.emplace_back(std::forward<_Args>(__args)...); }
 #endif
 #endif
@@ -292,6 +309,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       }
 #endif // __cplusplus >= 201103L
     };
+
+#if __cpp_deduction_guides >= 201606
+  template<typename _Container,
+	   typename = _RequireNotAllocator<_Container>>
+    queue(_Container) -> queue<typename _Container::value_type, _Container>;
+
+  template<typename _Container, typename _Allocator,
+	   typename = _RequireNotAllocator<_Container>,
+	   typename = _RequireAllocator<_Allocator>>
+    queue(_Container, _Allocator)
+    -> queue<typename _Container::value_type, _Container>;
+#endif
 
   /**
    *  @brief  Queue equality comparison.
@@ -376,12 +405,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
    *
    *  @tparam _Tp  Type of element.
    *  @tparam _Sequence  Type of underlying sequence, defaults to vector<_Tp>.
-   *  @tparam _Compare  Comparison function object type, defaults to 
+   *  @tparam _Compare  Comparison function object type, defaults to
    *                    less<_Sequence::value_type>.
    *
    *  This is not a true container, but an @e adaptor.  It holds
    *  another container, and provides a wrapper interface to that
-   *  container.  The wrapper is what enforces priority-based sorting 
+   *  container.  The wrapper is what enforces priority-based sorting
    *  and %queue behavior.  Very few of the standard container/sequence
    *  interface requirements are met (e.g., iterators).
    *
@@ -413,30 +442,42 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	   typename _Compare  = less<typename _Sequence::value_type> >
     class priority_queue
     {
+#ifdef _GLIBCXX_CONCEPT_CHECKS
       // concept requirements
       typedef typename _Sequence::value_type _Sequence_value_type;
+# if __cplusplus < 201103L
       __glibcxx_class_requires(_Tp, _SGIAssignableConcept)
+# endif
       __glibcxx_class_requires(_Sequence, _SequenceConcept)
       __glibcxx_class_requires(_Sequence, _RandomAccessContainerConcept)
       __glibcxx_class_requires2(_Tp, _Sequence_value_type, _SameTypeConcept)
       __glibcxx_class_requires4(_Compare, bool, _Tp, _Tp,
 				_BinaryFunctionConcept)
+#endif
 
 #if __cplusplus >= 201103L
       template<typename _Alloc>
 	using _Uses = typename
 	  enable_if<uses_allocator<_Sequence, _Alloc>::value>::type;
-#endif
+
+#if __cplusplus >= 201703L
+      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+      // 2566. Requirements on the first template parameter of container
+      // adaptors
+      static_assert(is_same<_Tp, typename _Sequence::value_type>::value,
+	  "value_type must be the same as the underlying container");
+#endif // C++17
+#endif // C++11
 
     public:
-      typedef typename _Sequence::value_type                value_type;
-      typedef typename _Sequence::reference                 reference;
-      typedef typename _Sequence::const_reference           const_reference;
-      typedef typename _Sequence::size_type                 size_type;
-      typedef          _Sequence                            container_type;
+      typedef typename	_Sequence::value_type		value_type;
+      typedef typename	_Sequence::reference		reference;
+      typedef typename	_Sequence::const_reference	const_reference;
+      typedef typename	_Sequence::size_type		size_type;
+      typedef		_Sequence			container_type;
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // DR 2684. priority_queue lacking comparator typedef
-      typedef	       _Compare				    value_compare;
+      typedef	       _Compare				value_compare;
 
     protected:
       //  See queue::c for notes on these names.
@@ -454,15 +495,19 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       : c(__s), comp(__x)
       { std::make_heap(c.begin(), c.end(), comp); }
 #else
+      template<typename _Seq = _Sequence, typename _Requires = typename
+	       enable_if<__and_<is_default_constructible<_Compare>,
+				is_default_constructible<_Seq>>::value>::type>
+	priority_queue()
+	: c(), comp() { }
+
       explicit
-      priority_queue(const _Compare& __x,
-		     const _Sequence& __s)
+      priority_queue(const _Compare& __x, const _Sequence& __s)
       : c(__s), comp(__x)
       { std::make_heap(c.begin(), c.end(), comp); }
 
       explicit
-      priority_queue(const _Compare& __x = _Compare(),
-		     _Sequence&& __s = _Sequence())
+      priority_queue(const _Compare& __x, _Sequence&& __s = _Sequence())
       : c(std::move(__s)), comp(__x)
       { std::make_heap(c.begin(), c.end(), comp); }
 
@@ -475,14 +520,18 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	priority_queue(const _Compare& __x, const _Alloc& __a)
 	: c(__a), comp(__x) { }
 
+      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+      // 2537. Constructors [...] taking allocators should call make_heap
       template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
 	priority_queue(const _Compare& __x, const _Sequence& __c,
 		       const _Alloc& __a)
-	: c(__c, __a), comp(__x) { }
+	: c(__c, __a), comp(__x)
+	{ std::make_heap(c.begin(), c.end(), comp); }
 
       template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
 	priority_queue(const _Compare& __x, _Sequence&& __c, const _Alloc& __a)
-	: c(std::move(__c), __a), comp(__x) { }
+	: c(std::move(__c), __a), comp(__x)
+	{ std::make_heap(c.begin(), c.end(), comp); }
 
       template<typename _Alloc, typename _Requires = _Uses<_Alloc>>
 	priority_queue(const priority_queue& __q, const _Alloc& __a)
@@ -510,33 +559,33 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        */
 #if __cplusplus < 201103L
       template<typename _InputIterator>
-        priority_queue(_InputIterator __first, _InputIterator __last,
+	priority_queue(_InputIterator __first, _InputIterator __last,
 		       const _Compare& __x = _Compare(),
 		       const _Sequence& __s = _Sequence())
 	: c(__s), comp(__x)
-        {
+	{
 	  __glibcxx_requires_valid_range(__first, __last);
 	  c.insert(c.end(), __first, __last);
 	  std::make_heap(c.begin(), c.end(), comp);
 	}
 #else
       template<typename _InputIterator>
-        priority_queue(_InputIterator __first, _InputIterator __last,
+	priority_queue(_InputIterator __first, _InputIterator __last,
 		       const _Compare& __x,
 		       const _Sequence& __s)
 	: c(__s), comp(__x)
-        {
+	{
 	  __glibcxx_requires_valid_range(__first, __last);
 	  c.insert(c.end(), __first, __last);
 	  std::make_heap(c.begin(), c.end(), comp);
 	}
 
       template<typename _InputIterator>
-        priority_queue(_InputIterator __first, _InputIterator __last,
+	priority_queue(_InputIterator __first, _InputIterator __last,
 		       const _Compare& __x = _Compare(),
 		       _Sequence&& __s = _Sequence())
 	: c(std::move(__s)), comp(__x)
-        {
+	{
 	  __glibcxx_requires_valid_range(__first, __last);
 	  c.insert(c.end(), __first, __last);
 	  std::make_heap(c.begin(), c.end(), comp);
@@ -546,7 +595,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       /**
        *  Returns true if the %queue is empty.
        */
-      bool
+      _GLIBCXX_NODISCARD bool
       empty() const
       { return c.empty(); }
 
@@ -590,8 +639,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       }
 
       template<typename... _Args>
-        void
-        emplace(_Args&&... __args)
+	void
+	emplace(_Args&&... __args)
 	{
 	  c.emplace_back(std::forward<_Args>(__args)...);
 	  std::push_heap(c.begin(), c.end(), comp);
@@ -622,12 +671,12 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       swap(priority_queue& __pq)
       noexcept(__and_<
 #if __cplusplus > 201402L || !defined(__STRICT_ANSI__) // c++1z or gnu++11
-                 __is_nothrow_swappable<_Sequence>,
+		 __is_nothrow_swappable<_Sequence>,
 #else
-                 __is_nothrow_swappable<_Tp>,
+		 __is_nothrow_swappable<_Tp>,
 #endif
-                 __is_nothrow_swappable<_Compare>
-               >::value)
+		 __is_nothrow_swappable<_Compare>
+	       >::value)
       {
 	using std::swap;
 	swap(c, __pq.c);
@@ -635,6 +684,32 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       }
 #endif // __cplusplus >= 201103L
     };
+
+#if __cpp_deduction_guides >= 201606
+  template<typename _Compare, typename _Container,
+	   typename = _RequireNotAllocator<_Compare>,
+	   typename = _RequireNotAllocator<_Container>>
+    priority_queue(_Compare, _Container)
+    -> priority_queue<typename _Container::value_type, _Container, _Compare>;
+
+  template<typename _InputIterator, typename _ValT
+	   = typename iterator_traits<_InputIterator>::value_type,
+	   typename _Compare = less<_ValT>,
+	   typename _Container = vector<_ValT>,
+	   typename = _RequireInputIter<_InputIterator>,
+	   typename = _RequireNotAllocator<_Compare>,
+	   typename = _RequireNotAllocator<_Container>>
+    priority_queue(_InputIterator, _InputIterator, _Compare = _Compare(),
+		   _Container = _Container())
+    -> priority_queue<_ValT, _Container, _Compare>;
+
+  template<typename _Compare, typename _Container, typename _Allocator,
+	   typename = _RequireNotAllocator<_Compare>,
+	   typename = _RequireNotAllocator<_Container>,
+	   typename = _RequireAllocator<_Allocator>>
+    priority_queue(_Compare, _Container, _Allocator)
+    -> priority_queue<typename _Container::value_type, _Container, _Compare>;
+#endif
 
   // No equality/comparison operators are provided for priority_queue.
 
@@ -644,7 +719,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #if __cplusplus > 201402L || !defined(__STRICT_ANSI__) // c++1z or gnu++11
     // Constrained free swap overload, see p0185r1
     typename enable_if<__and_<__is_swappable<_Sequence>,
-                              __is_swappable<_Compare>>::value>::type
+			      __is_swappable<_Compare>>::value>::type
 #else
     void
 #endif

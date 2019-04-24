@@ -1,5 +1,5 @@
 /* Implementation of the MATMUL intrinsic
-   Copyright (C) 2002-2016 Free Software Foundation, Inc.
+   Copyright (C) 2002-2019 Free Software Foundation, Inc.
    Contributed by Paul Brook <paul@nowt.org>
 
 This file is part of the GNU Fortran runtime library (libgfortran).
@@ -24,7 +24,6 @@ see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
 <http://www.gnu.org/licenses/>.  */
 
 #include "libgfortran.h"
-#include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
@@ -74,9 +73,6 @@ extern void matmul_c10 (gfc_array_c10 * const restrict retarray,
 	gfc_array_c10 * const restrict a, gfc_array_c10 * const restrict b, int try_blas,
 	int blas_limit, blas_call gemm);
 export_proto(matmul_c10);
-
-
-
 
 /* Put exhaustive list of possible architectures here here, ORed together.  */
 
@@ -148,8 +144,8 @@ matmul_c10_avx (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(b,1);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic: is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
       else if (GFC_DESCRIPTOR_RANK (b) == 1)
@@ -157,8 +153,8 @@ matmul_c10_avx (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(a,0);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic: is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
       else
@@ -166,17 +162,15 @@ matmul_c10_avx (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(a,0);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic for dimension 1:"
-			   " is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(b,1);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,1);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic for dimension 2:"
-			   " is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 2 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
     }
@@ -217,7 +211,9 @@ matmul_c10_avx (gfc_array_c10 * const restrict retarray,
   if (count != GFC_DESCRIPTOR_EXTENT(b,0))
     {
       if (count > 0 || GFC_DESCRIPTOR_EXTENT(b,0) > 0)
-	runtime_error ("dimension of array B incorrect in MATMUL intrinsic");
+	runtime_error ("Incorrect extent in argument B in MATMUL intrinsic "
+		       "in dimension 1: is %ld, should be %ld",
+		       (long int) GFC_DESCRIPTOR_EXTENT(b,0), (long int) count);
     }
 
   if (GFC_DESCRIPTOR_RANK (b) == 1)
@@ -226,9 +222,9 @@ matmul_c10_avx (gfc_array_c10 * const restrict retarray,
       bxstride = GFC_DESCRIPTOR_STRIDE(b,0);
 
       /* bystride should never be used for 1-dimensional b.
-	 in case it is we want it to cause a segfault, rather than
-	 an incorrect result. */
-      bystride = 0xDEADBEEF;
+         The value is only used for calculation of the
+         memory by the buffer.  */
+      bystride = 256;
       ycount = 1;
     }
   else
@@ -262,7 +258,18 @@ matmul_c10_avx (gfc_array_c10 * const restrict retarray,
       if (lda > 0 && ldb > 0 && ldc > 0 && m > 1 && n > 1 && k > 1)
 	{
 	  assert (gemm != NULL);
-	  gemm (axstride == 1 ? "N" : "T", bxstride == 1 ? "N" : "T", &m,
+	  const char *transa, *transb;
+	  if (try_blas & 2)
+	    transa = "C";
+	  else
+	    transa = axstride == 1 ? "N" : "T";
+
+	  if (try_blas & 4)
+	    transb = "C";
+	  else
+	    transb = bxstride == 1 ? "N" : "T";
+
+	  gemm (transa, transb , &m,
 		&n, &k,	&one, abase, &lda, bbase, &ldb, &zero, dest,
 		&ldc, 1, 1);
 	  return;
@@ -290,11 +297,11 @@ matmul_c10_avx (gfc_array_c10 * const restrict retarray,
 		 i1, i2, i3, i4, i5, i6;
 
       /* Local variables */
-      GFC_COMPLEX_10 t1[65536], /* was [256][256] */
-		 f11, f12, f21, f22, f31, f32, f41, f42,
+      GFC_COMPLEX_10 f11, f12, f21, f22, f31, f32, f41, f42,
 		 f13, f14, f23, f24, f33, f34, f43, f44;
       index_type i, j, l, ii, jj, ll;
       index_type isec, jsec, lsec, uisec, ujsec, ulsec;
+      GFC_COMPLEX_10 *t1;
 
       a = abase;
       b = bbase;
@@ -311,14 +318,27 @@ matmul_c10_avx (gfc_array_c10 * const restrict retarray,
       b_offset = 1 + b_dim1;
       b -= b_offset;
 
-      /* Early exit if possible */
-      if (m == 0 || n == 0 || k == 0)
-	return;
-
       /* Empty c first.  */
       for (j=1; j<=n; j++)
 	for (i=1; i<=m; i++)
 	  c[i + j * c_dim1] = (GFC_COMPLEX_10)0;
+
+      /* Early exit if possible */
+      if (m == 0 || n == 0 || k == 0)
+	return;
+
+      /* Adjust size of t1 to what is needed.  */
+      index_type t1_dim, a_sz;
+      if (aystride == 1)
+        a_sz = rystride;
+      else
+        a_sz = a_dim1;
+
+      t1_dim = a_sz * 256 + b_dim1;
+      if (t1_dim > 65536)
+	t1_dim = 65536;
+
+      t1 = malloc (t1_dim * sizeof(GFC_COMPLEX_10));
 
       /* Start turning the crank. */
       i1 = n;
@@ -529,6 +549,7 @@ matmul_c10_avx (gfc_array_c10 * const restrict retarray,
 		}
 	    }
 	}
+      free(t1);
       return;
     }
   else if (rxstride == 1 && aystride == 1 && bxstride == 1)
@@ -629,7 +650,7 @@ matmul_c10_avx (gfc_array_c10 * const restrict retarray,
 static void
 matmul_c10_avx2 (gfc_array_c10 * const restrict retarray, 
 	gfc_array_c10 * const restrict a, gfc_array_c10 * const restrict b, int try_blas,
-	int blas_limit, blas_call gemm) __attribute__((__target__("avx2")));
+	int blas_limit, blas_call gemm) __attribute__((__target__("avx2,fma")));
 static void
 matmul_c10_avx2 (gfc_array_c10 * const restrict retarray, 
 	gfc_array_c10 * const restrict a, gfc_array_c10 * const restrict b, int try_blas,
@@ -691,8 +712,8 @@ matmul_c10_avx2 (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(b,1);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic: is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
       else if (GFC_DESCRIPTOR_RANK (b) == 1)
@@ -700,8 +721,8 @@ matmul_c10_avx2 (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(a,0);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic: is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
       else
@@ -709,17 +730,15 @@ matmul_c10_avx2 (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(a,0);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic for dimension 1:"
-			   " is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(b,1);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,1);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic for dimension 2:"
-			   " is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 2 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
     }
@@ -760,7 +779,9 @@ matmul_c10_avx2 (gfc_array_c10 * const restrict retarray,
   if (count != GFC_DESCRIPTOR_EXTENT(b,0))
     {
       if (count > 0 || GFC_DESCRIPTOR_EXTENT(b,0) > 0)
-	runtime_error ("dimension of array B incorrect in MATMUL intrinsic");
+	runtime_error ("Incorrect extent in argument B in MATMUL intrinsic "
+		       "in dimension 1: is %ld, should be %ld",
+		       (long int) GFC_DESCRIPTOR_EXTENT(b,0), (long int) count);
     }
 
   if (GFC_DESCRIPTOR_RANK (b) == 1)
@@ -769,9 +790,9 @@ matmul_c10_avx2 (gfc_array_c10 * const restrict retarray,
       bxstride = GFC_DESCRIPTOR_STRIDE(b,0);
 
       /* bystride should never be used for 1-dimensional b.
-	 in case it is we want it to cause a segfault, rather than
-	 an incorrect result. */
-      bystride = 0xDEADBEEF;
+         The value is only used for calculation of the
+         memory by the buffer.  */
+      bystride = 256;
       ycount = 1;
     }
   else
@@ -805,7 +826,18 @@ matmul_c10_avx2 (gfc_array_c10 * const restrict retarray,
       if (lda > 0 && ldb > 0 && ldc > 0 && m > 1 && n > 1 && k > 1)
 	{
 	  assert (gemm != NULL);
-	  gemm (axstride == 1 ? "N" : "T", bxstride == 1 ? "N" : "T", &m,
+	  const char *transa, *transb;
+	  if (try_blas & 2)
+	    transa = "C";
+	  else
+	    transa = axstride == 1 ? "N" : "T";
+
+	  if (try_blas & 4)
+	    transb = "C";
+	  else
+	    transb = bxstride == 1 ? "N" : "T";
+
+	  gemm (transa, transb , &m,
 		&n, &k,	&one, abase, &lda, bbase, &ldb, &zero, dest,
 		&ldc, 1, 1);
 	  return;
@@ -833,11 +865,11 @@ matmul_c10_avx2 (gfc_array_c10 * const restrict retarray,
 		 i1, i2, i3, i4, i5, i6;
 
       /* Local variables */
-      GFC_COMPLEX_10 t1[65536], /* was [256][256] */
-		 f11, f12, f21, f22, f31, f32, f41, f42,
+      GFC_COMPLEX_10 f11, f12, f21, f22, f31, f32, f41, f42,
 		 f13, f14, f23, f24, f33, f34, f43, f44;
       index_type i, j, l, ii, jj, ll;
       index_type isec, jsec, lsec, uisec, ujsec, ulsec;
+      GFC_COMPLEX_10 *t1;
 
       a = abase;
       b = bbase;
@@ -854,14 +886,27 @@ matmul_c10_avx2 (gfc_array_c10 * const restrict retarray,
       b_offset = 1 + b_dim1;
       b -= b_offset;
 
-      /* Early exit if possible */
-      if (m == 0 || n == 0 || k == 0)
-	return;
-
       /* Empty c first.  */
       for (j=1; j<=n; j++)
 	for (i=1; i<=m; i++)
 	  c[i + j * c_dim1] = (GFC_COMPLEX_10)0;
+
+      /* Early exit if possible */
+      if (m == 0 || n == 0 || k == 0)
+	return;
+
+      /* Adjust size of t1 to what is needed.  */
+      index_type t1_dim, a_sz;
+      if (aystride == 1)
+        a_sz = rystride;
+      else
+        a_sz = a_dim1;
+
+      t1_dim = a_sz * 256 + b_dim1;
+      if (t1_dim > 65536)
+	t1_dim = 65536;
+
+      t1 = malloc (t1_dim * sizeof(GFC_COMPLEX_10));
 
       /* Start turning the crank. */
       i1 = n;
@@ -1072,6 +1117,7 @@ matmul_c10_avx2 (gfc_array_c10 * const restrict retarray,
 		}
 	    }
 	}
+      free(t1);
       return;
     }
   else if (rxstride == 1 && aystride == 1 && bxstride == 1)
@@ -1234,8 +1280,8 @@ matmul_c10_avx512f (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(b,1);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic: is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
       else if (GFC_DESCRIPTOR_RANK (b) == 1)
@@ -1243,8 +1289,8 @@ matmul_c10_avx512f (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(a,0);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic: is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
       else
@@ -1252,17 +1298,15 @@ matmul_c10_avx512f (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(a,0);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic for dimension 1:"
-			   " is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(b,1);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,1);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic for dimension 2:"
-			   " is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 2 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
     }
@@ -1303,7 +1347,9 @@ matmul_c10_avx512f (gfc_array_c10 * const restrict retarray,
   if (count != GFC_DESCRIPTOR_EXTENT(b,0))
     {
       if (count > 0 || GFC_DESCRIPTOR_EXTENT(b,0) > 0)
-	runtime_error ("dimension of array B incorrect in MATMUL intrinsic");
+	runtime_error ("Incorrect extent in argument B in MATMUL intrinsic "
+		       "in dimension 1: is %ld, should be %ld",
+		       (long int) GFC_DESCRIPTOR_EXTENT(b,0), (long int) count);
     }
 
   if (GFC_DESCRIPTOR_RANK (b) == 1)
@@ -1312,9 +1358,9 @@ matmul_c10_avx512f (gfc_array_c10 * const restrict retarray,
       bxstride = GFC_DESCRIPTOR_STRIDE(b,0);
 
       /* bystride should never be used for 1-dimensional b.
-	 in case it is we want it to cause a segfault, rather than
-	 an incorrect result. */
-      bystride = 0xDEADBEEF;
+         The value is only used for calculation of the
+         memory by the buffer.  */
+      bystride = 256;
       ycount = 1;
     }
   else
@@ -1348,7 +1394,18 @@ matmul_c10_avx512f (gfc_array_c10 * const restrict retarray,
       if (lda > 0 && ldb > 0 && ldc > 0 && m > 1 && n > 1 && k > 1)
 	{
 	  assert (gemm != NULL);
-	  gemm (axstride == 1 ? "N" : "T", bxstride == 1 ? "N" : "T", &m,
+	  const char *transa, *transb;
+	  if (try_blas & 2)
+	    transa = "C";
+	  else
+	    transa = axstride == 1 ? "N" : "T";
+
+	  if (try_blas & 4)
+	    transb = "C";
+	  else
+	    transb = bxstride == 1 ? "N" : "T";
+
+	  gemm (transa, transb , &m,
 		&n, &k,	&one, abase, &lda, bbase, &ldb, &zero, dest,
 		&ldc, 1, 1);
 	  return;
@@ -1376,11 +1433,11 @@ matmul_c10_avx512f (gfc_array_c10 * const restrict retarray,
 		 i1, i2, i3, i4, i5, i6;
 
       /* Local variables */
-      GFC_COMPLEX_10 t1[65536], /* was [256][256] */
-		 f11, f12, f21, f22, f31, f32, f41, f42,
+      GFC_COMPLEX_10 f11, f12, f21, f22, f31, f32, f41, f42,
 		 f13, f14, f23, f24, f33, f34, f43, f44;
       index_type i, j, l, ii, jj, ll;
       index_type isec, jsec, lsec, uisec, ujsec, ulsec;
+      GFC_COMPLEX_10 *t1;
 
       a = abase;
       b = bbase;
@@ -1397,14 +1454,27 @@ matmul_c10_avx512f (gfc_array_c10 * const restrict retarray,
       b_offset = 1 + b_dim1;
       b -= b_offset;
 
-      /* Early exit if possible */
-      if (m == 0 || n == 0 || k == 0)
-	return;
-
       /* Empty c first.  */
       for (j=1; j<=n; j++)
 	for (i=1; i<=m; i++)
 	  c[i + j * c_dim1] = (GFC_COMPLEX_10)0;
+
+      /* Early exit if possible */
+      if (m == 0 || n == 0 || k == 0)
+	return;
+
+      /* Adjust size of t1 to what is needed.  */
+      index_type t1_dim, a_sz;
+      if (aystride == 1)
+        a_sz = rystride;
+      else
+        a_sz = a_dim1;
+
+      t1_dim = a_sz * 256 + b_dim1;
+      if (t1_dim > 65536)
+	t1_dim = 65536;
+
+      t1 = malloc (t1_dim * sizeof(GFC_COMPLEX_10));
 
       /* Start turning the crank. */
       i1 = n;
@@ -1615,6 +1685,7 @@ matmul_c10_avx512f (gfc_array_c10 * const restrict retarray,
 		}
 	    }
 	}
+      free(t1);
       return;
     }
   else if (rxstride == 1 && aystride == 1 && bxstride == 1)
@@ -1711,6 +1782,24 @@ matmul_c10_avx512f (gfc_array_c10 * const restrict retarray,
 
 #endif  /* HAVE_AVX512F */
 
+/* AMD-specifix funtions with AVX128 and FMA3/FMA4.  */
+
+#if defined(HAVE_AVX) && defined(HAVE_FMA3) && defined(HAVE_AVX128)
+void
+matmul_c10_avx128_fma3 (gfc_array_c10 * const restrict retarray, 
+	gfc_array_c10 * const restrict a, gfc_array_c10 * const restrict b, int try_blas,
+	int blas_limit, blas_call gemm) __attribute__((__target__("avx,fma")));
+internal_proto(matmul_c10_avx128_fma3);
+#endif
+
+#if defined(HAVE_AVX) && defined(HAVE_FMA4) && defined(HAVE_AVX128)
+void
+matmul_c10_avx128_fma4 (gfc_array_c10 * const restrict retarray, 
+	gfc_array_c10 * const restrict a, gfc_array_c10 * const restrict b, int try_blas,
+	int blas_limit, blas_call gemm) __attribute__((__target__("avx,fma4")));
+internal_proto(matmul_c10_avx128_fma4);
+#endif
+
 /* Function to fall back to if there is no special processor-specific version.  */
 static void
 matmul_c10_vanilla (gfc_array_c10 * const restrict retarray, 
@@ -1773,8 +1862,8 @@ matmul_c10_vanilla (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(b,1);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic: is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
       else if (GFC_DESCRIPTOR_RANK (b) == 1)
@@ -1782,8 +1871,8 @@ matmul_c10_vanilla (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(a,0);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic: is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
       else
@@ -1791,17 +1880,15 @@ matmul_c10_vanilla (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(a,0);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic for dimension 1:"
-			   " is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(b,1);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,1);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic for dimension 2:"
-			   " is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 2 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
     }
@@ -1842,7 +1929,9 @@ matmul_c10_vanilla (gfc_array_c10 * const restrict retarray,
   if (count != GFC_DESCRIPTOR_EXTENT(b,0))
     {
       if (count > 0 || GFC_DESCRIPTOR_EXTENT(b,0) > 0)
-	runtime_error ("dimension of array B incorrect in MATMUL intrinsic");
+	runtime_error ("Incorrect extent in argument B in MATMUL intrinsic "
+		       "in dimension 1: is %ld, should be %ld",
+		       (long int) GFC_DESCRIPTOR_EXTENT(b,0), (long int) count);
     }
 
   if (GFC_DESCRIPTOR_RANK (b) == 1)
@@ -1851,9 +1940,9 @@ matmul_c10_vanilla (gfc_array_c10 * const restrict retarray,
       bxstride = GFC_DESCRIPTOR_STRIDE(b,0);
 
       /* bystride should never be used for 1-dimensional b.
-	 in case it is we want it to cause a segfault, rather than
-	 an incorrect result. */
-      bystride = 0xDEADBEEF;
+         The value is only used for calculation of the
+         memory by the buffer.  */
+      bystride = 256;
       ycount = 1;
     }
   else
@@ -1887,7 +1976,18 @@ matmul_c10_vanilla (gfc_array_c10 * const restrict retarray,
       if (lda > 0 && ldb > 0 && ldc > 0 && m > 1 && n > 1 && k > 1)
 	{
 	  assert (gemm != NULL);
-	  gemm (axstride == 1 ? "N" : "T", bxstride == 1 ? "N" : "T", &m,
+	  const char *transa, *transb;
+	  if (try_blas & 2)
+	    transa = "C";
+	  else
+	    transa = axstride == 1 ? "N" : "T";
+
+	  if (try_blas & 4)
+	    transb = "C";
+	  else
+	    transb = bxstride == 1 ? "N" : "T";
+
+	  gemm (transa, transb , &m,
 		&n, &k,	&one, abase, &lda, bbase, &ldb, &zero, dest,
 		&ldc, 1, 1);
 	  return;
@@ -1915,11 +2015,11 @@ matmul_c10_vanilla (gfc_array_c10 * const restrict retarray,
 		 i1, i2, i3, i4, i5, i6;
 
       /* Local variables */
-      GFC_COMPLEX_10 t1[65536], /* was [256][256] */
-		 f11, f12, f21, f22, f31, f32, f41, f42,
+      GFC_COMPLEX_10 f11, f12, f21, f22, f31, f32, f41, f42,
 		 f13, f14, f23, f24, f33, f34, f43, f44;
       index_type i, j, l, ii, jj, ll;
       index_type isec, jsec, lsec, uisec, ujsec, ulsec;
+      GFC_COMPLEX_10 *t1;
 
       a = abase;
       b = bbase;
@@ -1936,14 +2036,27 @@ matmul_c10_vanilla (gfc_array_c10 * const restrict retarray,
       b_offset = 1 + b_dim1;
       b -= b_offset;
 
-      /* Early exit if possible */
-      if (m == 0 || n == 0 || k == 0)
-	return;
-
       /* Empty c first.  */
       for (j=1; j<=n; j++)
 	for (i=1; i<=m; i++)
 	  c[i + j * c_dim1] = (GFC_COMPLEX_10)0;
+
+      /* Early exit if possible */
+      if (m == 0 || n == 0 || k == 0)
+	return;
+
+      /* Adjust size of t1 to what is needed.  */
+      index_type t1_dim, a_sz;
+      if (aystride == 1)
+        a_sz = rystride;
+      else
+        a_sz = a_dim1;
+
+      t1_dim = a_sz * 256 + b_dim1;
+      if (t1_dim > 65536)
+	t1_dim = 65536;
+
+      t1 = malloc (t1_dim * sizeof(GFC_COMPLEX_10));
 
       /* Start turning the crank. */
       i1 = n;
@@ -2154,6 +2267,7 @@ matmul_c10_vanilla (gfc_array_c10 * const restrict retarray,
 		}
 	    }
 	}
+      free(t1);
       return;
     }
   else if (rxstride == 1 && aystride == 1 && bxstride == 1)
@@ -2260,28 +2374,34 @@ void matmul_c10 (gfc_array_c10 * const restrict retarray,
 {
   static void (*matmul_p) (gfc_array_c10 * const restrict retarray, 
 	gfc_array_c10 * const restrict a, gfc_array_c10 * const restrict b, int try_blas,
-	int blas_limit, blas_call gemm) = NULL;
+	int blas_limit, blas_call gemm);
 
-  if (matmul_p == NULL)
+  void (*matmul_fn) (gfc_array_c10 * const restrict retarray, 
+	gfc_array_c10 * const restrict a, gfc_array_c10 * const restrict b, int try_blas,
+	int blas_limit, blas_call gemm);
+
+  matmul_fn = __atomic_load_n (&matmul_p, __ATOMIC_RELAXED);
+  if (matmul_fn == NULL)
     {
-      matmul_p = matmul_c10_vanilla;
+      matmul_fn = matmul_c10_vanilla;
       if (__cpu_model.__cpu_vendor == VENDOR_INTEL)
 	{
           /* Run down the available processors in order of preference.  */
 #ifdef HAVE_AVX512F
       	  if (__cpu_model.__cpu_features[0] & (1 << FEATURE_AVX512F))
 	    {
-	      matmul_p = matmul_c10_avx512f;
-	      goto tailcall;
+	      matmul_fn = matmul_c10_avx512f;
+	      goto store;
 	    }
 
 #endif  /* HAVE_AVX512F */
 
 #ifdef HAVE_AVX2
-      	  if (__cpu_model.__cpu_features[0] & (1 << FEATURE_AVX2))
+      	  if ((__cpu_model.__cpu_features[0] & (1 << FEATURE_AVX2))
+	     && (__cpu_model.__cpu_features[0] & (1 << FEATURE_FMA)))
 	    {
-	      matmul_p = matmul_c10_avx2;
-	      goto tailcall;
+	      matmul_fn = matmul_c10_avx2;
+	      goto store;
 	    }
 
 #endif
@@ -2289,15 +2409,36 @@ void matmul_c10 (gfc_array_c10 * const restrict retarray,
 #ifdef HAVE_AVX
       	  if (__cpu_model.__cpu_features[0] & (1 << FEATURE_AVX))
  	    {
-              matmul_p = matmul_c10_avx;
-	      goto tailcall;
+              matmul_fn = matmul_c10_avx;
+	      goto store;
 	    }
 #endif  /* HAVE_AVX */
         }
+    else if (__cpu_model.__cpu_vendor == VENDOR_AMD)
+      {
+#if defined(HAVE_AVX) && defined(HAVE_FMA3) && defined(HAVE_AVX128)
+        if ((__cpu_model.__cpu_features[0] & (1 << FEATURE_AVX))
+	    && (__cpu_model.__cpu_features[0] & (1 << FEATURE_FMA)))
+	  {
+            matmul_fn = matmul_c10_avx128_fma3;
+	    goto store;
+	  }
+#endif
+#if defined(HAVE_AVX) && defined(HAVE_FMA4) && defined(HAVE_AVX128)
+        if ((__cpu_model.__cpu_features[0] & (1 << FEATURE_AVX))
+	     && (__cpu_model.__cpu_features[0] & (1 << FEATURE_FMA4)))
+	  {
+            matmul_fn = matmul_c10_avx128_fma4;
+	    goto store;
+	  }
+#endif
+
+      }
+   store:
+      __atomic_store_n (&matmul_p, matmul_fn, __ATOMIC_RELAXED);
    }
 
-tailcall:
-   (*matmul_p) (retarray, a, b, try_blas, blas_limit, gemm);
+   (*matmul_fn) (retarray, a, b, try_blas, blas_limit, gemm);
 }
 
 #else  /* Just the vanilla function.  */
@@ -2363,8 +2504,8 @@ matmul_c10 (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(b,1);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic: is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
       else if (GFC_DESCRIPTOR_RANK (b) == 1)
@@ -2372,8 +2513,8 @@ matmul_c10 (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(a,0);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic: is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
       else
@@ -2381,17 +2522,15 @@ matmul_c10 (gfc_array_c10 * const restrict retarray,
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(a,0);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,0);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic for dimension 1:"
-			   " is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 1 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 
 	  arg_extent = GFC_DESCRIPTOR_EXTENT(b,1);
 	  ret_extent = GFC_DESCRIPTOR_EXTENT(retarray,1);
 	  if (arg_extent != ret_extent)
-	    runtime_error ("Incorrect extent in return array in"
-			   " MATMUL intrinsic for dimension 2:"
-			   " is %ld, should be %ld",
+	    runtime_error ("Array bound mismatch for dimension 2 of "
+	    		   "array (%ld/%ld) ",
 			   (long int) ret_extent, (long int) arg_extent);
 	}
     }
@@ -2432,7 +2571,9 @@ matmul_c10 (gfc_array_c10 * const restrict retarray,
   if (count != GFC_DESCRIPTOR_EXTENT(b,0))
     {
       if (count > 0 || GFC_DESCRIPTOR_EXTENT(b,0) > 0)
-	runtime_error ("dimension of array B incorrect in MATMUL intrinsic");
+	runtime_error ("Incorrect extent in argument B in MATMUL intrinsic "
+		       "in dimension 1: is %ld, should be %ld",
+		       (long int) GFC_DESCRIPTOR_EXTENT(b,0), (long int) count);
     }
 
   if (GFC_DESCRIPTOR_RANK (b) == 1)
@@ -2441,9 +2582,9 @@ matmul_c10 (gfc_array_c10 * const restrict retarray,
       bxstride = GFC_DESCRIPTOR_STRIDE(b,0);
 
       /* bystride should never be used for 1-dimensional b.
-	 in case it is we want it to cause a segfault, rather than
-	 an incorrect result. */
-      bystride = 0xDEADBEEF;
+         The value is only used for calculation of the
+         memory by the buffer.  */
+      bystride = 256;
       ycount = 1;
     }
   else
@@ -2477,7 +2618,18 @@ matmul_c10 (gfc_array_c10 * const restrict retarray,
       if (lda > 0 && ldb > 0 && ldc > 0 && m > 1 && n > 1 && k > 1)
 	{
 	  assert (gemm != NULL);
-	  gemm (axstride == 1 ? "N" : "T", bxstride == 1 ? "N" : "T", &m,
+	  const char *transa, *transb;
+	  if (try_blas & 2)
+	    transa = "C";
+	  else
+	    transa = axstride == 1 ? "N" : "T";
+
+	  if (try_blas & 4)
+	    transb = "C";
+	  else
+	    transb = bxstride == 1 ? "N" : "T";
+
+	  gemm (transa, transb , &m,
 		&n, &k,	&one, abase, &lda, bbase, &ldb, &zero, dest,
 		&ldc, 1, 1);
 	  return;
@@ -2505,11 +2657,11 @@ matmul_c10 (gfc_array_c10 * const restrict retarray,
 		 i1, i2, i3, i4, i5, i6;
 
       /* Local variables */
-      GFC_COMPLEX_10 t1[65536], /* was [256][256] */
-		 f11, f12, f21, f22, f31, f32, f41, f42,
+      GFC_COMPLEX_10 f11, f12, f21, f22, f31, f32, f41, f42,
 		 f13, f14, f23, f24, f33, f34, f43, f44;
       index_type i, j, l, ii, jj, ll;
       index_type isec, jsec, lsec, uisec, ujsec, ulsec;
+      GFC_COMPLEX_10 *t1;
 
       a = abase;
       b = bbase;
@@ -2526,14 +2678,27 @@ matmul_c10 (gfc_array_c10 * const restrict retarray,
       b_offset = 1 + b_dim1;
       b -= b_offset;
 
-      /* Early exit if possible */
-      if (m == 0 || n == 0 || k == 0)
-	return;
-
       /* Empty c first.  */
       for (j=1; j<=n; j++)
 	for (i=1; i<=m; i++)
 	  c[i + j * c_dim1] = (GFC_COMPLEX_10)0;
+
+      /* Early exit if possible */
+      if (m == 0 || n == 0 || k == 0)
+	return;
+
+      /* Adjust size of t1 to what is needed.  */
+      index_type t1_dim, a_sz;
+      if (aystride == 1)
+        a_sz = rystride;
+      else
+        a_sz = a_dim1;
+
+      t1_dim = a_sz * 256 + b_dim1;
+      if (t1_dim > 65536)
+	t1_dim = 65536;
+
+      t1 = malloc (t1_dim * sizeof(GFC_COMPLEX_10));
 
       /* Start turning the crank. */
       i1 = n;
@@ -2744,6 +2909,7 @@ matmul_c10 (gfc_array_c10 * const restrict retarray,
 		}
 	    }
 	}
+      free(t1);
       return;
     }
   else if (rxstride == 1 && aystride == 1 && bxstride == 1)

@@ -1,5 +1,5 @@
 /* Language independent return value optimizations
-   Copyright (C) 2004-2016 Free Software Foundation, Inc.
+   Copyright (C) 2004-2019 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -28,6 +28,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "tree-pretty-print.h"
 #include "gimple-iterator.h"
 #include "gimple-walk.h"
+#include "internal-fn.h"
 
 /* This file implements return value optimizations for functions which
    return aggregate types.
@@ -192,7 +193,7 @@ pass_nrv::execute (function *fun)
 	      if (found != NULL)
 		{
 		  /* If we found a return statement using a different variable
-		     than previous return statements, then we can not perform
+		     than previous return statements, then we cannot perform
 		     NRV optimizations.  */
 		  if (found != rhs)
 		    return 0;
@@ -377,6 +378,12 @@ pass_return_slot::execute (function *fun)
 	  if (stmt
 	      && gimple_call_lhs (stmt)
 	      && !gimple_call_return_slot_opt_p (stmt)
+	      /* Ignore internal functions without direct optabs,
+		 those are expanded specially and aggregate_value_p
+		 on their result might result in undesirable warnings
+		 with some backends.  */
+	      && (!gimple_call_internal_p (stmt)
+		  || direct_internal_fn_p (gimple_call_internal_fn (stmt)))
 	      && aggregate_value_p (TREE_TYPE (gimple_call_lhs (stmt)),
 				    gimple_call_fndecl (stmt)))
 	    {

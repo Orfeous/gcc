@@ -1,5 +1,5 @@
 /* Header file for libgcov-*.c.
-   Copyright (C) 1996-2016 Free Software Foundation, Inc.
+   Copyright (C) 1996-2019 Free Software Foundation, Inc.
 
    This file is part of GCC.
 
@@ -38,10 +38,12 @@
 /* This path will be used by libgcov runtime.  */
 
 #include "tconfig.h"
+#include "auto-target.h"
 #include "tsystem.h"
 #include "coretypes.h"
 #include "tm.h"
 #include "libgcc_tm.h"
+#include "gcov.h"
 
 #if __CHAR_BIT__ == 8
 typedef unsigned gcov_unsigned_t __attribute__ ((mode (SI)));
@@ -224,6 +226,15 @@ struct gcov_master
   gcov_unsigned_t version;
   struct gcov_root *root;
 };
+
+struct indirect_call_tuple
+{
+  /* Callee function.  */
+  void *callee;
+
+  /* Pointer to counters.  */
+  gcov_type *counters;
+};
   
 /* Exactly one of these will be active in the process.  */
 extern struct gcov_master __gcov_master;
@@ -237,16 +248,11 @@ extern void __gcov_init (struct gcov_info *) ATTRIBUTE_HIDDEN;
 /* GCOV exit function registered via a static destructor.  */
 extern void __gcov_exit (void) ATTRIBUTE_HIDDEN;
 
-/* Called before fork, to avoid double counting.  */
-extern void __gcov_flush (void) ATTRIBUTE_HIDDEN;
-
 /* Function to reset all counters to 0.  Both externally visible (and
    overridable) and internal version.  */
-extern void __gcov_reset (void);
 extern void __gcov_reset_int (void) ATTRIBUTE_HIDDEN;
 
 /* User function to enable early write of profile information so far.  */
-extern void __gcov_dump (void);
 extern void __gcov_dump_int (void) ATTRIBUTE_HIDDEN;
 
 /* The merge function that just sums the counters.  */
@@ -272,7 +278,7 @@ extern void __gcov_pow2_profiler (gcov_type *, gcov_type);
 extern void __gcov_pow2_profiler_atomic (gcov_type *, gcov_type);
 extern void __gcov_one_value_profiler (gcov_type *, gcov_type);
 extern void __gcov_one_value_profiler_atomic (gcov_type *, gcov_type);
-extern void __gcov_indirect_call_profiler_v2 (gcov_type, void *);
+extern void __gcov_indirect_call_profiler_v3 (gcov_type, void *);
 extern void __gcov_time_profiler (gcov_type *);
 extern void __gcov_time_profiler_atomic (gcov_type *);
 extern void __gcov_average_profiler (gcov_type *, gcov_type);

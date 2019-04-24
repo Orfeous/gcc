@@ -1,6 +1,6 @@
 // shared_ptr and weak_ptr implementation -*- C++ -*-
 
-// Copyright (C) 2007-2016 Free Software Foundation, Inc.
+// Copyright (C) 2007-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -70,7 +70,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       return __os;
     }
 
-  /// 20.7.2.2.10 shared_ptr get_deleter
   template<typename _Del, typename _Tp, _Lock_policy _Lp>
     inline _Del*
     get_deleter(const __shared_ptr<_Tp, _Lp>& __p) noexcept
@@ -82,6 +81,17 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 #endif
     }
 
+  /// 20.7.2.2.10 shared_ptr get_deleter
+  template<typename _Del, typename _Tp>
+    inline _Del*
+    get_deleter(const shared_ptr<_Tp>& __p) noexcept
+    {
+#if __cpp_rtti
+      return static_cast<_Del*>(__p._M_get_deleter(typeid(_Del)));
+#else
+      return 0;
+#endif
+    }
 
   /**
    *  @brief  A smart pointer with reference-counted copy semantics.
@@ -144,7 +154,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       template<typename _Yp, typename _Deleter,
 	       typename = _Constructible<_Yp*, _Deleter>>
 	shared_ptr(_Yp* __p, _Deleter __d)
-        : __shared_ptr<_Tp>(__p, __d) { }
+        : __shared_ptr<_Tp>(__p, std::move(__d)) { }
 
       /**
        *  @brief  Construct a %shared_ptr that owns a null pointer
@@ -161,7 +171,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        */
       template<typename _Deleter>
 	shared_ptr(nullptr_t __p, _Deleter __d)
-        : __shared_ptr<_Tp>(__p, __d) { }
+        : __shared_ptr<_Tp>(__p, std::move(__d)) { }
 
       /**
        *  @brief  Construct a %shared_ptr that owns the pointer @a __p
@@ -181,7 +191,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       template<typename _Yp, typename _Deleter, typename _Alloc,
 	       typename = _Constructible<_Yp*, _Deleter, _Alloc>>
 	shared_ptr(_Yp* __p, _Deleter __d, _Alloc __a)
-	: __shared_ptr<_Tp>(__p, __d, std::move(__a)) { }
+	: __shared_ptr<_Tp>(__p, std::move(__d), std::move(__a)) { }
 
       /**
        *  @brief  Construct a %shared_ptr that owns a null pointer
@@ -200,7 +210,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
        */
       template<typename _Deleter, typename _Alloc>
 	shared_ptr(nullptr_t __p, _Deleter __d, _Alloc __a)
-	: __shared_ptr<_Tp>(__p, __d, std::move(__a)) { }
+	: __shared_ptr<_Tp>(__p, std::move(__d), std::move(__a)) { }
 
       // Aliasing constructor
 
@@ -266,8 +276,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	: __shared_ptr<_Tp>(__r) { }
 
 #if _GLIBCXX_USE_DEPRECATED
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
       template<typename _Yp, typename = _Constructible<auto_ptr<_Yp>>>
 	shared_ptr(auto_ptr<_Yp>&& __r);
+#pragma GCC diagnostic pop
 #endif
 
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
@@ -304,6 +317,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	}
 
 #if _GLIBCXX_USE_DEPRECATED
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
       template<typename _Yp>
 	_Assignable<auto_ptr<_Yp>>
 	operator=(auto_ptr<_Yp>&& __r)
@@ -311,6 +326,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  this->__shared_ptr<_Tp>::operator=(std::move(__r));
 	  return *this;
 	}
+#pragma GCC diagnostic pop
 #endif
 
       shared_ptr&
@@ -339,9 +355,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     private:
       // This constructor is non-standard, it is used by allocate_shared.
       template<typename _Alloc, typename... _Args>
-	shared_ptr(_Sp_make_shared_tag __tag, const _Alloc& __a,
-		   _Args&&... __args)
-	: __shared_ptr<_Tp>(__tag, __a, std::forward<_Args>(__args)...)
+	shared_ptr(_Sp_alloc_shared_tag<_Alloc> __tag, _Args&&... __args)
+	: __shared_ptr<_Tp>(__tag, std::forward<_Args>(__args)...)
 	{ }
 
       template<typename _Yp, typename _Alloc, typename... _Args>
@@ -355,39 +370,46 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       friend class weak_ptr<_Tp>;
     };
 
+#if __cpp_deduction_guides >= 201606
+  template<typename _Tp>
+    shared_ptr(weak_ptr<_Tp>) ->  shared_ptr<_Tp>;
+  template<typename _Tp, typename _Del>
+    shared_ptr(unique_ptr<_Tp, _Del>) ->  shared_ptr<_Tp>;
+#endif
+
   // 20.7.2.2.7 shared_ptr comparisons
   template<typename _Tp, typename _Up>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator==(const shared_ptr<_Tp>& __a, const shared_ptr<_Up>& __b) noexcept
     { return __a.get() == __b.get(); }
 
   template<typename _Tp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator==(const shared_ptr<_Tp>& __a, nullptr_t) noexcept
     { return !__a; }
 
   template<typename _Tp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator==(nullptr_t, const shared_ptr<_Tp>& __a) noexcept
     { return !__a; }
 
   template<typename _Tp, typename _Up>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator!=(const shared_ptr<_Tp>& __a, const shared_ptr<_Up>& __b) noexcept
     { return __a.get() != __b.get(); }
 
   template<typename _Tp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator!=(const shared_ptr<_Tp>& __a, nullptr_t) noexcept
     { return (bool)__a; }
 
   template<typename _Tp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator!=(nullptr_t, const shared_ptr<_Tp>& __a) noexcept
     { return (bool)__a; }
 
   template<typename _Tp, typename _Up>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<(const shared_ptr<_Tp>& __a, const shared_ptr<_Up>& __b) noexcept
     {
       using _Tp_elt = typename shared_ptr<_Tp>::element_type;
@@ -397,7 +419,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _Tp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<(const shared_ptr<_Tp>& __a, nullptr_t) noexcept
     {
       using _Tp_elt = typename shared_ptr<_Tp>::element_type;
@@ -405,7 +427,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _Tp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<(nullptr_t, const shared_ptr<_Tp>& __a) noexcept
     {
       using _Tp_elt = typename shared_ptr<_Tp>::element_type;
@@ -413,53 +435,49 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     }
 
   template<typename _Tp, typename _Up>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<=(const shared_ptr<_Tp>& __a, const shared_ptr<_Up>& __b) noexcept
     { return !(__b < __a); }
 
   template<typename _Tp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<=(const shared_ptr<_Tp>& __a, nullptr_t) noexcept
     { return !(nullptr < __a); }
 
   template<typename _Tp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator<=(nullptr_t, const shared_ptr<_Tp>& __a) noexcept
     { return !(__a < nullptr); }
 
   template<typename _Tp, typename _Up>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>(const shared_ptr<_Tp>& __a, const shared_ptr<_Up>& __b) noexcept
     { return (__b < __a); }
 
   template<typename _Tp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>(const shared_ptr<_Tp>& __a, nullptr_t) noexcept
     { return nullptr < __a; }
 
   template<typename _Tp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>(nullptr_t, const shared_ptr<_Tp>& __a) noexcept
     { return __a < nullptr; }
 
   template<typename _Tp, typename _Up>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>=(const shared_ptr<_Tp>& __a, const shared_ptr<_Up>& __b) noexcept
     { return !(__a < __b); }
 
   template<typename _Tp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>=(const shared_ptr<_Tp>& __a, nullptr_t) noexcept
     { return !(__a < nullptr); }
 
   template<typename _Tp>
-    inline bool
+    _GLIBCXX_NODISCARD inline bool
     operator>=(nullptr_t, const shared_ptr<_Tp>& __a) noexcept
     { return !(nullptr < __a); }
-
-  template<typename _Tp>
-    struct less<shared_ptr<_Tp>> : public _Sp_less<shared_ptr<_Tp>>
-    { };
 
   // 20.7.2.2.8 shared_ptr specialized algorithms.
   template<typename _Tp>
@@ -577,6 +595,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       { return shared_ptr<_Tp>(*this, std::nothrow); }
     };
 
+#if __cpp_deduction_guides >= 201606
+  template<typename _Tp>
+    weak_ptr(shared_ptr<_Tp>) ->  weak_ptr<_Tp>;
+#endif
+
   // 20.7.2.3.6 weak_ptr specialized algorithms.
   template<typename _Tp>
     inline void
@@ -675,7 +698,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     inline shared_ptr<_Tp>
     allocate_shared(const _Alloc& __a, _Args&&... __args)
     {
-      return shared_ptr<_Tp>(_Sp_make_shared_tag(), __a,
+      return shared_ptr<_Tp>(_Sp_alloc_shared_tag<_Alloc>{__a},
 			     std::forward<_Args>(__args)...);
     }
 
@@ -690,7 +713,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     inline shared_ptr<_Tp>
     make_shared(_Args&&... __args)
     {
-      typedef typename std::remove_const<_Tp>::type _Tp_nc;
+      typedef typename std::remove_cv<_Tp>::type _Tp_nc;
       return std::allocate_shared<_Tp>(std::allocator<_Tp_nc>(),
 				       std::forward<_Args>(__args)...);
     }
@@ -708,6 +731,27 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     };
 
   // @} group pointer_abstractions
+
+#if __cplusplus >= 201703L
+  namespace __detail::__variant
+  {
+    template<typename> struct _Never_valueless_alt; // see <variant>
+
+    // Provide the strong exception-safety guarantee when emplacing a
+    // shared_ptr into a variant.
+    template<typename _Tp>
+      struct _Never_valueless_alt<std::shared_ptr<_Tp>>
+      : std::true_type
+      { };
+
+    // Provide the strong exception-safety guarantee when emplacing a
+    // weak_ptr into a variant.
+    template<typename _Tp>
+      struct _Never_valueless_alt<std::weak_ptr<_Tp>>
+      : std::true_type
+      { };
+  }  // namespace __detail::__variant
+#endif // C++17
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace

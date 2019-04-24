@@ -1,6 +1,6 @@
 /* PR middle-end/78476 - snprintf(0, 0, ...) with known arguments not
    optimized away
-   { dg-compile }
+   { dg-do compile }
    { dg-options "-O2 -fdump-tree-optimized" }
    { dg-require-effective-target int32plus } */
 
@@ -21,13 +21,14 @@
       FAIL (__LINE__)(value);			\
   } while (0)
 
+/* Verify that EXPECT == snprintf(0, 0, ...).  */
 #define EQL(expect, ...)				\
   do {							\
     int n = __builtin_snprintf (0, 0, __VA_ARGS__);	\
     ASSERT (n, expect);					\
   } while (0)
 
-int ival (int i) { return i; }
+static int ival (int i) { return i; }
 
 /* Generate a signed int value in the specified range.  */
 
@@ -135,11 +136,11 @@ void test_arg_string (const char *s)
 
 void test_arg_multiarg (int i, double d)
 {
-  EQL (16, "%i %f %s", 123, 3.14, "abc");
   EQL (16, "%12i %s", i, "abc");
   EQL (16, "%*i %s", 12, i, "abc");
 }
 
+/* Verify that EXPECT == vsnprintf(0, 0, ...).  */
 #define EQLv(expect, fmt, va)				\
   do {							\
     int n = __builtin_vsnprintf (0, 0, fmt, va);	\
@@ -149,9 +150,7 @@ void test_arg_multiarg (int i, double d)
 void test_va_int (__builtin_va_list va)
 {
   EQLv ( 2, "%02hhx", va);
-  EQLv ( 2, "%02.*hhx", va);
   EQLv ( 4, "%04hx", va);
-  EQLv ( 4, "%04.*hx", va);
 }
 
 void test_va_multiarg (__builtin_va_list va)

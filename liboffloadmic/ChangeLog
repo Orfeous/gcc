@@ -1,3 +1,65 @@
+2019-01-09  Sandra Loosemore  <sandra@codesourcery.com>
+
+	PR other/16615
+
+	* include/coi/common/COIResult_common.h: Mechanically replace
+	"can not" with "cannot".
+	* include/coi/source/COIBuffer_source.h: Likewise.
+
+2018-12-14  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* runtime/offload.h (omp_target_is_present, omp_target_memcpy)
+	(omp_target_memcpy_rect, omp_target_associate_ptr)
+	(omp_target_disassociate_ptr): Adjust to libgomp changes.
+
+2018-10-31  Joseph Myers  <joseph@codesourcery.com>
+
+	PR bootstrap/82856
+	* Makefile.am: Include multilib.am.
+	* configure.ac: Remove AC_PREREQ.
+	* plugin/Makefile.am: Include multilib.am.
+	* plugin/configure.ac: Remove AC_PREREQ.
+	* Makefile.in, aclocal.m4, configure, plugin/Makefile.in,
+	plugin/aclocal.m4, plugin/configure: Regenerate.
+
+2018-04-18  David Malcolm  <dmalcolm@redhat.com>
+
+	PR jit/85384
+	* configure: Regenerate.
+	* plugin/configure: Regenerate.
+
+2017-01-31  Thomas Schwinge  <thomas@codesourcery.com>
+
+	* plugin/libgomp-plugin-intelmic.cpp (GOMP_OFFLOAD_get_type): Fix
+	return type.
+	(GOMP_OFFLOAD_load_image): Fix argument types.
+
+2017-01-21  Jakub Jelinek  <jakub@redhat.com>
+
+	PR other/79046
+	* plugin/configure.ac: Add GCC_BASE_VER.
+	* plugin/Makefile.am (gcc_version): Use @get_gcc_base_ver@ instead
+	of cat to get version from BASE-VER file.
+	* plugin/configure: Regenerated.
+	* plugin/aclocal.m4: Regenerated.
+	* plugin/Makefile.in: Regenerated.
+
+2017-01-20  Jakub Jelinek  <jakub@redhat.com>
+
+	PR other/79046
+	* aclocal.m4: Regenerated.
+	* Makefile.in: Regenerated.
+
+2017-01-17  Jakub Jelinek  <jakub@redhat.com>
+
+	PR other/79046
+	* configure.ac: Add GCC_BASE_VER.
+	* Makefile.am (gcc_version): Use @get_gcc_base_ver@ instead of cat to
+	get version from BASE-VER file.
+	* aclocal.m4: Include ../config/acx.m4.
+	* configure: Regenerated.
+	* Makefile.in: Regenerated.
+
 2016-11-15  Matthias Klose  <doko@ubuntu.com>
 
 	* configure: Regenerate.
@@ -604,3 +666,9 @@
 	* runtime/orsl-lite/lib/orsl-lite.c: Ditto.
 	* runtime/orsl-lite/version.txt: Ditto.
 	* runtime/use_mpss2.txt: Ditto.
+
+Copyright (C) 2014-2018 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.

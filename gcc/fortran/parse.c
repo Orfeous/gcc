@@ -1,5 +1,5 @@
 /* Main parser.
-   Copyright (C) 2000-2016 Free Software Foundation, Inc.
+   Copyright (C) 2000-2019 Free Software Foundation, Inc.
    Contributed by Andy Vaught
 
 This file is part of GCC.
@@ -132,7 +132,7 @@ use_modules (void)
 	return st;						\
       else							\
 	undo_new_statement ();				  	\
-    } while (0);
+    } while (0)
 
 
 /* This is a specialist version of decode_statement that is used
@@ -451,6 +451,7 @@ decode_statement (void)
 
     case 'c':
       match ("call", gfc_match_call, ST_CALL);
+      match ("change team", gfc_match_change_team, ST_CHANGE_TEAM);
       match ("close", gfc_match_close, ST_CLOSE);
       match ("continue", gfc_match_continue, ST_CONTINUE);
       match ("contiguous", gfc_match_contiguous, ST_ATTR_DECL);
@@ -470,6 +471,7 @@ decode_statement (void)
 
     case 'e':
       match ("end file", gfc_match_endfile, ST_END_FILE);
+      match ("end team", gfc_match_end_team, ST_END_TEAM);
       match ("exit", gfc_match_exit, ST_EXIT);
       match ("else", gfc_match_else, ST_ELSE);
       match ("else where", gfc_match_elsewhere, ST_ELSEWHERE);
@@ -488,8 +490,10 @@ decode_statement (void)
       break;
 
     case 'f':
+      match ("fail image", gfc_match_fail_image, ST_FAIL_IMAGE);
       match ("final", gfc_match_final_decl, ST_FINAL);
       match ("flush", gfc_match_flush, ST_FLUSH);
+      match ("form team", gfc_match_form_team, ST_FORM_TEAM);
       match ("format", gfc_match_format, ST_FORMAT);
       break;
 
@@ -557,6 +561,7 @@ decode_statement (void)
       match ("sync all", gfc_match_sync_all, ST_SYNC_ALL);
       match ("sync images", gfc_match_sync_images, ST_SYNC_IMAGES);
       match ("sync memory", gfc_match_sync_memory, ST_SYNC_MEMORY);
+      match ("sync team", gfc_match_sync_team, ST_SYNC_TEAM);
       break;
 
     case 't':
@@ -582,10 +587,16 @@ decode_statement (void)
     }
 
   /* All else has failed, so give up.  See if any of the matchers has
-     stored an error message of some sort.  */
-
+     stored an error message of some sort.  Suppress the "Unclassifiable
+     statement" if a previous error message was emitted, e.g., by
+     gfc_error_now ().  */
   if (!gfc_error_check ())
-    gfc_error_now ("Unclassifiable statement at %C");
+    {
+      int ecnt;
+      gfc_get_errors (NULL, &ecnt);
+      if (ecnt <= 0)
+        gfc_error_now ("Unclassifiable statement at %C");
+    }
 
   reject_statement ();
 
@@ -605,7 +616,7 @@ decode_statement (void)
 	return st;						\
       else							\
 	undo_new_statement ();				  	\
-    } while (0);
+    } while (0)
 
 static gfc_statement
 decode_oacc_directive (void)
@@ -618,6 +629,8 @@ decode_oacc_directive (void)
 
   gfc_clear_error ();   /* Clear any pending errors.  */
   gfc_clear_warning (); /* Clear any pending warnings.  */
+
+  gfc_matching_function = false;
 
   if (gfc_pure (NULL))
     {
@@ -721,10 +734,13 @@ decode_oacc_directive (void)
 	goto do_spec_only;					\
       if (match_word_omp_simd (keyword, subr, &old_locus,	\
 			       &simd_matched) == MATCH_YES)	\
-	return st;						\
+	{							\
+	  ret = st;						\
+	  goto finish;						\
+	}							\
       else							\
 	undo_new_statement ();				  	\
-    } while (0);
+    } while (0)
 
 /* Like match, but don't match anything if not -fopenmp
    and if spec_only, goto do_spec_only without actually matching.  */
@@ -736,20 +752,26 @@ decode_oacc_directive (void)
 	goto do_spec_only;					\
       else if (match_word (keyword, subr, &old_locus)		\
 	       == MATCH_YES)					\
-	return st;						\
+	{							\
+	  ret = st;						\
+	  goto finish;						\
+	}							\
       else							\
 	undo_new_statement ();				  	\
-    } while (0);
+    } while (0)
 
 /* Like match, but set a flag simd_matched if keyword matched.  */
 #define matchds(keyword, subr, st)				\
     do {							\
       if (match_word_omp_simd (keyword, subr, &old_locus,	\
 			       &simd_matched) == MATCH_YES)	\
-	return st;						\
+	{							\
+	  ret = st;						\
+	  goto finish;						\
+	}							\
       else							\
 	undo_new_statement ();				  	\
-    } while (0);
+    } while (0)
 
 /* Like match, but don't match anything if not -fopenmp.  */
 #define matchdo(keyword, subr, st)				\
@@ -758,10 +780,13 @@ decode_oacc_directive (void)
 	;							\
       else if (match_word (keyword, subr, &old_locus)		\
 	       == MATCH_YES)					\
-	return st;						\
+	{							\
+	  ret = st;						\
+	  goto finish;						\
+	}							\
       else							\
 	undo_new_statement ();				  	\
-    } while (0);
+    } while (0)
 
 static gfc_statement
 decode_omp_directive (void)
@@ -770,25 +795,19 @@ decode_omp_directive (void)
   char c;
   bool simd_matched = false;
   bool spec_only = false;
+  gfc_statement ret = ST_NONE;
+  bool pure_ok = true;
 
   gfc_enforce_clean_symbol_state ();
 
   gfc_clear_error ();	/* Clear any pending errors.  */
   gfc_clear_warning ();	/* Clear any pending warnings.  */
 
-  if (gfc_pure (NULL))
-    {
-      gfc_error_now ("OpenMP directives at %C may not appear in PURE "
-		     "or ELEMENTAL procedures");
-      gfc_error_recovery ();
-      return ST_NONE;
-    }
+  gfc_matching_function = false;
 
   if (gfc_current_state () == COMP_FUNCTION
       && gfc_current_block ()->result->ts.kind == -1)
     spec_only = true;
-
-  gfc_unset_implicit_pure (NULL);
 
   old_locus = gfc_current_locus;
 
@@ -797,6 +816,33 @@ decode_omp_directive (void)
      first character.  */
 
   c = gfc_peek_ascii_char ();
+
+  /* match is for directives that should be recognized only if
+     -fopenmp, matchs for directives that should be recognized
+     if either -fopenmp or -fopenmp-simd.
+     Handle only the directives allowed in PURE/ELEMENTAL procedures
+     first (those also shall not turn off implicit pure).  */
+  switch (c)
+    {
+    case 'd':
+      matchds ("declare simd", gfc_match_omp_declare_simd,
+	       ST_OMP_DECLARE_SIMD);
+      matchdo ("declare target", gfc_match_omp_declare_target,
+	       ST_OMP_DECLARE_TARGET);
+      break;
+    case 's':
+      matchs ("simd", gfc_match_omp_simd, ST_OMP_SIMD);
+      break;
+    }
+
+  pure_ok = false;
+  if (flag_openmp && gfc_pure (NULL))
+    {
+      gfc_error_now ("OpenMP directives other than SIMD or DECLARE TARGET "
+		     "at %C may not appear in PURE or ELEMENTAL procedures");
+      gfc_error_recovery ();
+      return ST_NONE;
+    }
 
   /* match is for directives that should be recognized only if
      -fopenmp, matchs for directives that should be recognized
@@ -818,10 +864,6 @@ decode_omp_directive (void)
     case 'd':
       matchds ("declare reduction", gfc_match_omp_declare_reduction,
 	       ST_OMP_DECLARE_REDUCTION);
-      matchds ("declare simd", gfc_match_omp_declare_simd,
-	       ST_OMP_DECLARE_SIMD);
-      matchdo ("declare target", gfc_match_omp_declare_target,
-	       ST_OMP_DECLARE_TARGET);
       matchs ("distribute parallel do simd",
 	      gfc_match_omp_distribute_parallel_do_simd,
 	      ST_OMP_DISTRIBUTE_PARALLEL_DO_SIMD);
@@ -847,7 +889,7 @@ decode_omp_directive (void)
       matcho ("end do", gfc_match_omp_end_nowait, ST_OMP_END_DO);
       matchs ("end simd", gfc_match_omp_eos, ST_OMP_END_SIMD);
       matcho ("end master", gfc_match_omp_eos, ST_OMP_END_MASTER);
-      matcho ("end ordered", gfc_match_omp_eos, ST_OMP_END_ORDERED);
+      matchs ("end ordered", gfc_match_omp_eos, ST_OMP_END_ORDERED);
       matchs ("end parallel do simd", gfc_match_omp_eos,
 	      ST_OMP_END_PARALLEL_DO_SIMD);
       matcho ("end parallel do", gfc_match_omp_eos, ST_OMP_END_PARALLEL_DO);
@@ -901,14 +943,16 @@ decode_omp_directive (void)
       matcho ("master", gfc_match_omp_master, ST_OMP_MASTER);
       break;
     case 'o':
-      if (flag_openmp && gfc_match ("ordered depend (") == MATCH_YES)
+      if (gfc_match ("ordered depend (") == MATCH_YES)
 	{
 	  gfc_current_locus = old_locus;
+	  if (!flag_openmp)
+	    break;
 	  matcho ("ordered", gfc_match_omp_ordered_depend,
 		  ST_OMP_ORDERED_DEPEND);
 	}
       else
-	matcho ("ordered", gfc_match_omp_ordered, ST_OMP_ORDERED);
+	matchs ("ordered", gfc_match_omp_ordered, ST_OMP_ORDERED);
       break;
     case 'p':
       matchs ("parallel do simd", gfc_match_omp_parallel_do_simd,
@@ -923,7 +967,6 @@ decode_omp_directive (void)
     case 's':
       matcho ("sections", gfc_match_omp_sections, ST_OMP_SECTIONS);
       matcho ("section", gfc_match_omp_eos, ST_OMP_SECTION);
-      matchs ("simd", gfc_match_omp_simd, ST_OMP_SIMD);
       matcho ("single", gfc_match_omp_single, ST_OMP_SINGLE);
       break;
     case 't':
@@ -997,6 +1040,23 @@ decode_omp_directive (void)
 
   return ST_NONE;
 
+ finish:
+  if (!pure_ok)
+    {
+      gfc_unset_implicit_pure (NULL);
+
+      if (!flag_openmp && gfc_pure (NULL))
+	{
+	  gfc_error_now ("OpenMP directives other than SIMD or DECLARE TARGET "
+			 "at %C may not appear in PURE or ELEMENTAL "
+			 "procedures");
+	  reject_statement ();
+	  gfc_error_recovery ();
+	  return ST_NONE;
+	}
+    }
+  return ret;
+
  do_spec_only:
   reject_statement ();
   gfc_clear_error ();
@@ -1017,6 +1077,8 @@ decode_gcc_attribute (void)
   old_locus = gfc_current_locus;
 
   match ("attributes", gfc_match_gcc_attributes, ST_ATTR_DECL);
+  match ("unroll", gfc_match_gcc_unroll, ST_NONE);
+  match ("builtin", gfc_match_gcc_builtin, ST_NONE);
 
   /* All else has failed, so give up.  See if any of the matchers has
      stored an error message of some sort.  */
@@ -1456,7 +1518,9 @@ next_statement (void)
   case ST_OMP_TARGET_EXIT_DATA: case ST_OMP_ORDERED_DEPEND: \
   case ST_ERROR_STOP: case ST_SYNC_ALL: \
   case ST_SYNC_IMAGES: case ST_SYNC_MEMORY: case ST_LOCK: case ST_UNLOCK: \
-  case ST_EVENT_POST: case ST_EVENT_WAIT: \
+  case ST_FORM_TEAM: case ST_CHANGE_TEAM: \
+  case ST_END_TEAM: case ST_SYNC_TEAM: \
+  case ST_EVENT_POST: case ST_EVENT_WAIT: case ST_FAIL_IMAGE: \
   case ST_OACC_UPDATE: case ST_OACC_WAIT: case ST_OACC_CACHE: \
   case ST_OACC_ENTER_DATA: case ST_OACC_EXIT_DATA
 
@@ -1784,6 +1848,21 @@ gfc_ascii_statement (gfc_statement st)
     case ST_EVENT_WAIT:
       p = "EVENT WAIT";
       break;
+    case ST_FAIL_IMAGE:
+      p = "FAIL IMAGE";
+      break;
+    case ST_CHANGE_TEAM:
+      p = "CHANGE TEAM";
+      break;
+    case ST_END_TEAM:
+      p = "END TEAM";
+      break;
+    case ST_FORM_TEAM:
+      p = "FORM TEAM";
+      break;
+    case ST_SYNC_TEAM:
+      p = "SYNC TEAM";
+      break;
     case ST_END_ASSOCIATE:
       p = "END ASSOCIATE";
       break;
@@ -2081,10 +2160,10 @@ gfc_ascii_statement (gfc_statement st)
       p = "!$ACC ROUTINE";
       break;
     case ST_OACC_ATOMIC:
-      p = "!ACC ATOMIC";
+      p = "!$ACC ATOMIC";
       break;
     case ST_OACC_END_ATOMIC:
-      p = "!ACC END ATOMIC";
+      p = "!$ACC END ATOMIC";
       break;
     case ST_OMP_ATOMIC:
       p = "!$OMP ATOMIC";
@@ -2688,6 +2767,9 @@ unexpected_eof (void)
   gfc_done_2 ();
 
   longjmp (eof_buf, 1);
+
+  /* Avoids build error on systems where longjmp is not declared noreturn.  */
+  gcc_unreachable ();
 }
 
 
@@ -2874,7 +2956,7 @@ check_component (gfc_symbol *sym, gfc_component *c, gfc_component **lockp,
       coarray = true;
       sym->attr.coarray_comp = 1;
     }
- 
+
   if (c->ts.type == BT_DERIVED && c->ts.u.derived->attr.coarray_comp
       && !c->attr.pointer)
     {
@@ -3038,7 +3120,7 @@ parse_union (void)
           /* Add a component to the union for each map. */
           if (!gfc_add_component (un, gfc_new_block->name, &c))
             {
-              gfc_internal_error ("failed to create map component '%s'", 
+              gfc_internal_error ("failed to create map component '%s'",
                   gfc_new_block->name);
               reject_statement ();
               return;
@@ -3647,6 +3729,7 @@ loop:
 	case ST_EQUIVALENCE:
 	case ST_IMPLICIT:
 	case ST_IMPLICIT_NONE:
+	case ST_OMP_THREADPRIVATE:
 	case ST_PARAMETER:
 	case ST_STRUCTURE_DECL:
 	case ST_TYPE:
@@ -3663,7 +3746,7 @@ loop:
 	  break;
       }
 
-  /* If we find a statement that can not be followed by an IMPLICIT statement
+  /* If we find a statement that cannot be followed by an IMPLICIT statement
      (and thus we can expect to see none any further), type the function result
      if it has not yet been typed.  Be careful not to give the END statement
      to verify_st_order!  */
@@ -4297,8 +4380,8 @@ parse_critical_block (void)
   for (sd = gfc_state_stack; sd; sd = sd->previous)
     if (sd->state == COMP_OMP_STRUCTURED_BLOCK)
       gfc_error_now (is_oacc (sd)
-		     ? "CRITICAL block inside of OpenACC region at %C"
-		     : "CRITICAL block inside of OpenMP region at %C");
+		     ? G_("CRITICAL block inside of OpenACC region at %C")
+		     : G_("CRITICAL block inside of OpenMP region at %C"));
 
   s.ext.end_do_label = new_st.label1;
 
@@ -4460,7 +4543,7 @@ parse_associate (void)
 	 in case of association to a derived-type.  */
       sym->ts = a->target->ts;
 
-      /* Check if the target expression is array valued.  This can not always
+      /* Check if the target expression is array valued.  This cannot always
 	 be done by looking at target.rank, because that might not have been
 	 set yet.  Therefore traverse the chain of refs, looking for the last
 	 array ref and evaluate that.  */
@@ -4486,7 +4569,7 @@ parse_associate (void)
 	  else
 	    rank = a->target->rank;
 	  /* When the rank is greater than zero then sym will be an array.  */
-	  if (sym->ts.type == BT_CLASS)
+	  if (sym->ts.type == BT_CLASS && CLASS_DATA (sym))
 	    {
 	      if ((!CLASS_DATA (sym)->as && rank != 0)
 		  || (CLASS_DATA (sym)->as
@@ -4582,7 +4665,14 @@ parse_do_block (void)
   s.ext.end_do_label = new_st.label1;
 
   if (new_st.ext.iterator != NULL)
-    stree = new_st.ext.iterator->var->symtree;
+    {
+      stree = new_st.ext.iterator->var->symtree;
+      if (directive_unroll != -1)
+	{
+	  new_st.ext.iterator->unroll = directive_unroll;
+	  directive_unroll = -1;
+	}
+    }
   else
     stree = NULL;
 
@@ -5340,6 +5430,9 @@ parse_executable (gfc_statement st)
 	  return st;
 	}
 
+      if (directive_unroll != -1)
+	gfc_error ("%<GCC unroll%> directive does not commence a loop at %C");
+
       st = next_statement ();
     }
 }
@@ -5577,6 +5670,8 @@ parse_progunit (gfc_statement st)
   gfc_state_data *p;
   int n;
 
+  gfc_adjust_builtins ();
+
   if (gfc_new_block
       && gfc_new_block->abr_modproc_decl
       && gfc_new_block->attr.function)
@@ -5693,16 +5788,28 @@ gfc_global_used (gfc_gsymbol *sym, locus *where)
       name = "MODULE";
       break;
     default:
-      gfc_internal_error ("gfc_global_used(): Bad type");
       name = NULL;
     }
 
-  if (sym->binding_label)
-    gfc_error ("Global binding name %qs at %L is already being used as a %s "
-	       "at %L", sym->binding_label, where, name, &sym->where);
+  if (name)
+    {
+      if (sym->binding_label)
+	gfc_error ("Global binding name %qs at %L is already being used "
+		   "as a %s at %L", sym->binding_label, where, name,
+		   &sym->where);
+      else
+	gfc_error ("Global name %qs at %L is already being used as "
+		   "a %s at %L", sym->name, where, name, &sym->where);
+    }
   else
-    gfc_error ("Global name %qs at %L is already being used as a %s at %L",
-	       sym->name, where, name, &sym->where);
+    {
+      if (sym->binding_label)
+	gfc_error ("Global binding name %qs at %L is already being used "
+		   "at %L", sym->binding_label, where, &sym->where);
+      else
+	gfc_error ("Global name %qs at %L is already being used at %L",
+		   sym->name, where, &sym->where);
+    }
 }
 
 
@@ -5732,7 +5839,7 @@ parse_block_data (void)
     }
   else
     {
-      s = gfc_get_gsymbol (gfc_new_block->name);
+      s = gfc_get_gsymbol (gfc_new_block->name, false);
       if (s->defined
 	  || (s->type != GSYM_UNKNOWN && s->type != GSYM_BLOCK_DATA))
        gfc_global_used (s, &gfc_new_block->declared_at);
@@ -5766,6 +5873,9 @@ static void
 set_syms_host_assoc (gfc_symbol *sym)
 {
   gfc_component *c;
+  const char dot[2] = ".";
+  char parent1[GFC_MAX_SYMBOL_LEN + 1];
+  char parent2[GFC_MAX_SYMBOL_LEN + 1];
 
   if (sym == NULL)
     return;
@@ -5773,16 +5883,32 @@ set_syms_host_assoc (gfc_symbol *sym)
   if (sym->attr.module_procedure)
     sym->attr.external = 0;
 
-/*  sym->attr.access = ACCESS_PUBLIC;  */
-
   sym->attr.use_assoc = 0;
   sym->attr.host_assoc = 1;
   sym->attr.used_in_submodule =1;
 
   if (sym->attr.flavor == FL_DERIVED)
     {
-      for (c = sym->components; c; c = c->next)
-	c->attr.access = ACCESS_PUBLIC;
+      /* Derived types with PRIVATE components that are declared in
+	 modules other than the parent module must not be changed to be
+	 PUBLIC. The 'use-assoc' attribute must be reset so that the
+	 test in symbol.c(gfc_find_component) works correctly. This is
+	 not necessary for PRIVATE symbols since they are not read from
+	 the module.  */
+      memset(parent1, '\0', sizeof(parent1));
+      memset(parent2, '\0', sizeof(parent2));
+      strcpy (parent1, gfc_new_block->name);
+      strcpy (parent2, sym->module);
+      if (strcmp (strtok (parent1, dot), strtok (parent2, dot)) == 0)
+	{
+	  for (c = sym->components; c; c = c->next)
+	    c->attr.access = ACCESS_PUBLIC;
+	}
+      else
+	{
+	  sym->attr.use_assoc = 1;
+	  sym->attr.host_assoc = 0;
+	}
     }
 }
 
@@ -5795,7 +5921,7 @@ parse_module (void)
   gfc_gsymbol *s;
   bool error;
 
-  s = gfc_get_gsymbol (gfc_new_block->name);
+  s = gfc_get_gsymbol (gfc_new_block->name, false);
   if (s->defined || (s->type != GSYM_UNKNOWN && s->type != GSYM_MODULE))
     gfc_global_used (s, &gfc_new_block->declared_at);
   else
@@ -5859,7 +5985,7 @@ add_global_procedure (bool sub)
      name is a global identifier.  */
   if (!gfc_new_block->binding_label || gfc_notification_std (GFC_STD_F2008))
     {
-      s = gfc_get_gsymbol (gfc_new_block->name);
+      s = gfc_get_gsymbol (gfc_new_block->name, false);
 
       if (s->defined
 	  || (s->type != GSYM_UNKNOWN
@@ -5884,7 +6010,7 @@ add_global_procedure (bool sub)
       && (!gfc_notification_std (GFC_STD_F2008)
           || strcmp (gfc_new_block->name, gfc_new_block->binding_label) != 0))
     {
-      s = gfc_get_gsymbol (gfc_new_block->binding_label);
+      s = gfc_get_gsymbol (gfc_new_block->binding_label, true);
 
       if (s->defined
 	  || (s->type != GSYM_UNKNOWN
@@ -5916,7 +6042,7 @@ add_global_program (void)
 
   if (gfc_new_block == NULL)
     return;
-  s = gfc_get_gsymbol (gfc_new_block->name);
+  s = gfc_get_gsymbol (gfc_new_block->name, false);
 
   if (s->defined || (s->type != GSYM_UNKNOWN && s->type != GSYM_PROGRAM))
     gfc_global_used (s, &gfc_new_block->declared_at);
@@ -5934,7 +6060,7 @@ add_global_program (void)
 static void
 resolve_all_program_units (gfc_namespace *gfc_global_ns_list)
 {
-  gfc_free_dt_list ();
+  gfc_derived_types = NULL;
   gfc_current_ns = gfc_global_ns_list;
   for (; gfc_current_ns; gfc_current_ns = gfc_current_ns->sibling)
     {
@@ -6151,6 +6277,9 @@ loop:
   /* Dump the parse tree if requested.  */
   if (flag_dump_fortran_original)
     gfc_dump_parse_tree (gfc_current_ns, stdout);
+
+  if (flag_c_prototypes)
+    gfc_dump_c_prototypes (gfc_current_ns, stdout);
 
   gfc_get_errors (NULL, &errors);
   if (s.state == COMP_MODULE || s.state == COMP_SUBMODULE)

@@ -1,5 +1,5 @@
 /* __builtin_object_size (ptr, object_size_type) computation
-   Copyright (C) 2004-2016 Free Software Foundation, Inc.
+   Copyright (C) 2004-2019 Free Software Foundation, Inc.
    Contributed by Jakub Jelinek <jakub@redhat.com>
 
 This file is part of GCC.
@@ -32,13 +32,15 @@ along with GCC; see the file COPYING3.  If not see
 #include "gimple-fold.h"
 #include "gimple-iterator.h"
 #include "tree-cfg.h"
+#include "stringpool.h"
+#include "attribs.h"
 
 struct object_size_info
 {
   int object_size_type;
-  bitmap visited, reexamine;
-  int pass;
+  unsigned char pass;
   bool changed;
+  bitmap visited, reexamine;
   unsigned int *depths;
   unsigned int *stack, *tos;
 };
@@ -208,11 +210,17 @@ addr_object_size (struct object_size_info *osi, const_tree ptr,
 	}
       if (sz != unknown[object_size_type])
 	{
-	  offset_int dsz = wi::sub (sz, mem_ref_offset (pt_var));
-	  if (wi::neg_p (dsz))
-	    sz = 0;
-	  else if (wi::fits_uhwi_p (dsz))
-	    sz = dsz.to_uhwi ();
+	  offset_int mem_offset;
+	  if (mem_ref_offset (pt_var).is_constant (&mem_offset))
+	    {
+	      offset_int dsz = wi::sub (sz, mem_offset);
+	      if (wi::neg_p (dsz))
+		sz = 0;
+	      else if (wi::fits_uhwi_p (dsz))
+		sz = dsz.to_uhwi ();
+	      else
+		sz = unknown[object_size_type];
+	    }
 	  else
 	    sz = unknown[object_size_type];
 	}
@@ -393,25 +401,28 @@ addr_object_size (struct object_size_info *osi, const_tree ptr,
 
 
 /* Compute __builtin_object_size for CALL, which is a GIMPLE_CALL.
-   Handles various allocation calls.  OBJECT_SIZE_TYPE is the second
-   argument from __builtin_object_size.  If unknown, return
-   unknown[object_size_type].  */
+   Handles calls to functions declared with attribute alloc_size.
+   OBJECT_SIZE_TYPE is the second argument from __builtin_object_size.
+   If unknown, return unknown[object_size_type].  */
 
 static unsigned HOST_WIDE_INT
 alloc_object_size (const gcall *call, int object_size_type)
 {
-  tree callee, bytes = NULL_TREE;
-  tree alloc_size;
-  int arg1 = -1, arg2 = -1;
-
   gcc_assert (is_gimple_call (call));
 
-  callee = gimple_call_fndecl (call);
-  if (!callee)
+  tree calltype;
+  if (tree callfn = gimple_call_fndecl (call))
+    calltype = TREE_TYPE (callfn);
+  else
+    calltype = gimple_call_fntype (call);
+
+  if (!calltype)
     return unknown[object_size_type];
 
-  alloc_size = lookup_attribute ("alloc_size",
-				 TYPE_ATTRIBUTES (TREE_TYPE (callee)));
+  /* Set to positions of alloc_size arguments.  */
+  int arg1 = -1, arg2 = -1;
+  tree alloc_size = lookup_attribute ("alloc_size",
+				      TYPE_ATTRIBUTES (calltype));
   if (alloc_size && TREE_VALUE (alloc_size))
     {
       tree p = TREE_VALUE (alloc_size);
@@ -421,20 +432,6 @@ alloc_object_size (const gcall *call, int object_size_type)
         arg2 = TREE_INT_CST_LOW (TREE_VALUE (TREE_CHAIN (p)))-1;
     }
 
-  if (DECL_BUILT_IN_CLASS (callee) == BUILT_IN_NORMAL)
-    switch (DECL_FUNCTION_CODE (callee))
-      {
-      case BUILT_IN_CALLOC:
-	arg2 = 1;
-	/* fall through */
-      case BUILT_IN_MALLOC:
-      case BUILT_IN_ALLOCA:
-      case BUILT_IN_ALLOCA_WITH_ALIGN:
-	arg1 = 0;
-      default:
-	break;
-      }
-
   if (arg1 < 0 || arg1 >= (int)gimple_call_num_args (call)
       || TREE_CODE (gimple_call_arg (call, arg1)) != INTEGER_CST
       || (arg2 >= 0
@@ -442,6 +439,7 @@ alloc_object_size (const gcall *call, int object_size_type)
 	      || TREE_CODE (gimple_call_arg (call, arg2)) != INTEGER_CST)))
     return unknown[object_size_type];
 
+  tree bytes = NULL_TREE;
   if (arg2 >= 0)
     bytes = size_binop (MULT_EXPR,
 	fold_convert (sizetype, gimple_call_arg (call, arg1)),
@@ -463,34 +461,17 @@ alloc_object_size (const gcall *call, int object_size_type)
 static tree
 pass_through_call (const gcall *call)
 {
-  tree callee = gimple_call_fndecl (call);
+  unsigned rf = gimple_call_return_flags (call);
+  if (rf & ERF_RETURNS_ARG)
+    {
+      unsigned argnum = rf & ERF_RETURN_ARG_MASK;
+      if (argnum < gimple_call_num_args (call))
+	return gimple_call_arg (call, argnum);
+    }
 
-  if (callee
-      && DECL_BUILT_IN_CLASS (callee) == BUILT_IN_NORMAL)
-    switch (DECL_FUNCTION_CODE (callee))
-      {
-      case BUILT_IN_MEMCPY:
-      case BUILT_IN_MEMMOVE:
-      case BUILT_IN_MEMSET:
-      case BUILT_IN_STRCPY:
-      case BUILT_IN_STRNCPY:
-      case BUILT_IN_STRCAT:
-      case BUILT_IN_STRNCAT:
-      case BUILT_IN_MEMCPY_CHK:
-      case BUILT_IN_MEMMOVE_CHK:
-      case BUILT_IN_MEMSET_CHK:
-      case BUILT_IN_STRCPY_CHK:
-      case BUILT_IN_STRNCPY_CHK:
-      case BUILT_IN_STPNCPY_CHK:
-      case BUILT_IN_STRCAT_CHK:
-      case BUILT_IN_STRNCAT_CHK:
-      case BUILT_IN_ASSUME_ALIGNED:
-	if (gimple_call_num_args (call) >= 1)
-	  return gimple_call_arg (call, 0);
-	break;
-      default:
-	break;
-      }
+  /* __builtin_assume_aligned is intentionally not marked RET1.  */
+  if (gimple_call_builtin_p (call, BUILT_IN_ASSUME_ALIGNED))
+    return gimple_call_arg (call, 0);
 
   return NULL_TREE;
 }
@@ -1235,7 +1216,7 @@ init_object_sizes (void)
 
 /* Destroy data structures after the object size computation.  */
 
-static void
+void
 fini_object_sizes (void)
 {
   int object_size_type;
@@ -1380,7 +1361,7 @@ pass_object_sizes::execute (function *fun)
 	      fprintf (dump_file, "Simplified\n  ");
 	      print_gimple_stmt (dump_file, call, 0, dump_flags);
 	      fprintf (dump_file, " to ");
-	      print_generic_expr (dump_file, result, 0);
+	      print_generic_expr (dump_file, result);
 	      fprintf (dump_file, "\n");
 	    }
 

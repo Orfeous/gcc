@@ -2,14 +2,16 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// +build darwin dragonfly freebsd linux netbsd openbsd solaris
+// +build aix darwin dragonfly freebsd hurd linux netbsd openbsd solaris
 
 // Read system DNS config from /etc/resolv.conf
 
 package net
 
 import (
+	"internal/bytealg"
 	"os"
+	"sync/atomic"
 	"time"
 )
 
@@ -29,6 +31,7 @@ type dnsConfig struct {
 	lookup     []string      // OpenBSD top-level database "lookup" order
 	err        error         // any error that occurs during open of resolv.conf
 	mtime      time.Time     // time of resolv.conf modification
+	soffset    uint32        // used by serverOffset
 }
 
 // See resolv.conf(5) on a Linux machine.
@@ -71,7 +74,7 @@ func dnsReadConfig(filename string) *dnsConfig {
 				// to look it up.
 				if parseIPv4(f[1]) != nil {
 					conf.servers = append(conf.servers, JoinHostPort(f[1], "53"))
-				} else if ip, _ := parseIPv6(f[1], true); ip != nil {
+				} else if ip, _ := parseIPv6Zone(f[1]); ip != nil {
 					conf.servers = append(conf.servers, JoinHostPort(f[1], "53"))
 				}
 			}
@@ -91,19 +94,21 @@ func dnsReadConfig(filename string) *dnsConfig {
 			for _, s := range f[1:] {
 				switch {
 				case hasPrefix(s, "ndots:"):
-					n, _, _ := dtoi(s, 6)
-					if n < 1 {
-						n = 1
+					n, _, _ := dtoi(s[6:])
+					if n < 0 {
+						n = 0
+					} else if n > 15 {
+						n = 15
 					}
 					conf.ndots = n
 				case hasPrefix(s, "timeout:"):
-					n, _, _ := dtoi(s, 8)
+					n, _, _ := dtoi(s[8:])
 					if n < 1 {
 						n = 1
 					}
 					conf.timeout = time.Duration(n) * time.Second
 				case hasPrefix(s, "attempts:"):
-					n, _, _ := dtoi(s, 9)
+					n, _, _ := dtoi(s[9:])
 					if n < 1 {
 						n = 1
 					}
@@ -117,7 +122,7 @@ func dnsReadConfig(filename string) *dnsConfig {
 
 		case "lookup":
 			// OpenBSD option:
-			// http://www.openbsd.org/cgi-bin/man.cgi/OpenBSD-current/man5/resolv.conf.5
+			// https://www.openbsd.org/cgi-bin/man.cgi/OpenBSD-current/man5/resolv.conf.5
 			// "the legal space-separated values are: bind, file, yp"
 			conf.lookup = f[1:]
 
@@ -134,13 +139,24 @@ func dnsReadConfig(filename string) *dnsConfig {
 	return conf
 }
 
+// serverOffset returns an offset that can be used to determine
+// indices of servers in c.servers when making queries.
+// When the rotate option is enabled, this offset increases.
+// Otherwise it is always 0.
+func (c *dnsConfig) serverOffset() uint32 {
+	if c.rotate {
+		return atomic.AddUint32(&c.soffset, 1) - 1 // return 0 to start
+	}
+	return 0
+}
+
 func dnsDefaultSearch() []string {
 	hn, err := getHostname()
 	if err != nil {
 		// best effort
 		return nil
 	}
-	if i := byteIndex(hn, '.'); i >= 0 && i < len(hn)-1 {
+	if i := bytealg.IndexByteString(hn, '.'); i >= 0 && i < len(hn)-1 {
 		return []string{ensureRooted(hn[i+1:])}
 	}
 	return nil

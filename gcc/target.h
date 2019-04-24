@@ -1,5 +1,5 @@
 /* Data structure definitions for a generic GCC target.
-   Copyright (C) 2001-2016 Free Software Foundation, Inc.
+   Copyright (C) 2001-2019 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by the
@@ -140,6 +140,9 @@ struct ddg;
 /* This is defined in cfgloop.h .  */
 struct loop;
 
+/* This is defined in ifcvt.h.  */
+struct noce_if_info;
+
 /* This is defined in tree-ssa-alias.h.  */
 struct ao_ref;
 
@@ -155,8 +158,11 @@ extern bool stmt_in_inner_loop_p (struct _stmt_vec_info *);
 struct asm_int_op
 {
   const char *hi;
+  const char *psi;
   const char *si;
+  const char *pdi;
   const char *di;
+  const char *pti;
   const char *ti;
 };
 
@@ -168,9 +174,11 @@ enum vect_cost_for_stmt
   scalar_store,
   vector_stmt,
   vector_load,
+  vector_gather_load,
   unaligned_load,
   unaligned_store,
   vector_store,
+  vector_scatter_store,
   vec_to_scalar,
   scalar_to_vec,
   cond_branch_not_taken,
@@ -188,6 +196,15 @@ enum vect_cost_model_location {
   vect_epilogue = 2
 };
 
+class vec_perm_indices;
+
+/* The type to use for lists of vector sizes.  */
+typedef vec<poly_uint64> vector_sizes;
+
+/* Same, but can be used to construct local lists that are
+   automatically freed.  */
+typedef auto_vec<poly_uint64, 8> auto_vector_sizes;
+
 /* The target structure.  This holds all the backend hooks.  */
 #define DEFHOOKPOD(NAME, DOC, TYPE, INIT) TYPE NAME;
 #define DEFHOOK(NAME, DOC, TYPE, PARAMS, INIT) TYPE (* NAME) PARAMS;
@@ -197,6 +214,21 @@ enum vect_cost_model_location {
 #include "target.def"
 
 extern struct gcc_target targetm;
+
+/* Return an estimate of the runtime value of X, for use in things
+   like cost calculations or profiling frequencies.  Note that this
+   function should never be used in situations where the actual
+   runtime value is needed for correctness, since the function only
+   provides a rough guess.  */
+
+static inline HOST_WIDE_INT
+estimated_poly_value (poly_int64 x)
+{
+  if (NUM_POLY_INT_COEFFS == 1)
+    return x.coeffs[0];
+  else
+    return targetm.estimated_poly_value (x);
+}
 
 #ifdef GCC_TM_H
 

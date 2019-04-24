@@ -1,7 +1,5 @@
-/* { dg-do run { target { powerpc64*-*-* } } } */
-/* { dg-require-effective-target powerpc_p8vector_ok } */
-/* { dg-skip-if "do not override -mcpu" { powerpc*-*-* } { "-mcpu=*" } { "-mcpu=power8" } } */
-/* { dg-options "-mcpu=power8 -O3" } */
+/* { dg-do run { target { powerpc*-*-* && { p8vector_hw && int128 } } } } */
+/* { dg-options "-mdejagnu-cpu=power8 -O3" } */
 
 /* Test that the vec_addec builtin works as expected.  */
 

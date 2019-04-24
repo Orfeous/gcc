@@ -1,6 +1,6 @@
 // Raw memory manipulators -*- C++ -*-
 
-// Copyright (C) 2001-2016 Free Software Foundation, Inc.
+// Copyright (C) 2001-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -206,7 +206,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _ForwardIterator __cur = __first;
 	  __try
 	    {
-	      for (; __n > 0; --__n, ++__cur)
+	      for (; __n > 0; --__n, (void) ++__cur)
 		std::_Construct(std::__addressof(*__cur), __x);
 	      return __cur;
 	    }
@@ -347,7 +347,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       __try
 	{
 	  typedef __gnu_cxx::__alloc_traits<_Allocator> __traits;
-	  for (; __n > 0; --__n, ++__cur)
+	  for (; __n > 0; --__n, (void) ++__cur)
 	    __traits::construct(__alloc, std::__addressof(*__cur), __x);
 	  return __cur;
 	}
@@ -523,7 +523,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _ForwardIterator __cur = __first;
 	  __try
 	    {
-	      for (; __n > 0; --__n, ++__cur)
+	      for (; __n > 0; --__n, (void) ++__cur)
 		std::_Construct(std::__addressof(*__cur));
 	      return __cur;
 	    }
@@ -627,7 +627,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       __try
 	{
 	  typedef __gnu_cxx::__alloc_traits<_Allocator> __traits;
-	  for (; __n > 0; --__n, ++__cur)
+	  for (; __n > 0; --__n, (void) ++__cur)
 	    __traits::construct(__alloc, std::__addressof(*__cur));
 	  return __cur;
 	}
@@ -687,7 +687,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  _ForwardIterator __cur = __first;
 	  __try
 	    {
-	      for (; __n > 0; --__n, ++__cur)
+	      for (; __n > 0; --__n, (void) ++__cur)
 		std::_Construct_novalue(std::__addressof(*__cur));
 	      return __cur;
 	    }
@@ -747,7 +747,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _ForwardIterator __cur = __result;
       __try
 	{
-	  for (; __n > 0; --__n, ++__first, ++__cur)
+	  for (; __n > 0; --__n, (void) ++__first, ++__cur)
 	    std::_Construct(std::__addressof(*__cur), *__first);
 	  return __cur;
 	}
@@ -775,7 +775,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       _ForwardIterator __cur = __result;
       __try
 	{
-	  for (; __n > 0; --__n, ++__first, ++__cur)
+	  for (; __n > 0; --__n, (void) ++__first, ++__cur)
 	    std::_Construct(std::__addressof(*__cur), *__first);
 	  return {__first, __cur};
 	}
@@ -826,81 +826,128 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 #endif
 
-#if __cplusplus > 201402L
+#if __cplusplus >= 201703L
+# define __cpp_lib_raw_memory_algorithms 201606L
+
   template <typename _ForwardIterator>
     inline void
     uninitialized_default_construct(_ForwardIterator __first,
 				    _ForwardIterator __last)
-  {
-    __uninitialized_default_novalue(__first, __last);
-  }
+    {
+      __uninitialized_default_novalue(__first, __last);
+    }
 
   template <typename _ForwardIterator, typename _Size>
     inline _ForwardIterator
     uninitialized_default_construct_n(_ForwardIterator __first, _Size __count)
-  {
-    return __uninitialized_default_novalue_n(__first, __count);
-  }
+    {
+      return __uninitialized_default_novalue_n(__first, __count);
+    }
 
   template <typename _ForwardIterator>
     inline void
     uninitialized_value_construct(_ForwardIterator __first,
 				  _ForwardIterator __last)
-  {
-    return __uninitialized_default(__first, __last);
-  }
+    {
+      return __uninitialized_default(__first, __last);
+    }
 
   template <typename _ForwardIterator, typename _Size>
     inline _ForwardIterator
     uninitialized_value_construct_n(_ForwardIterator __first, _Size __count)
-  {
-    return __uninitialized_default_n(__first, __count);
-  }
+    {
+      return __uninitialized_default_n(__first, __count);
+    }
 
   template <typename _InputIterator, typename _ForwardIterator>
     inline _ForwardIterator
     uninitialized_move(_InputIterator __first, _InputIterator __last,
 		       _ForwardIterator __result)
-  {
-    return std::uninitialized_copy
-      (_GLIBCXX_MAKE_MOVE_ITERATOR(__first),
-       _GLIBCXX_MAKE_MOVE_ITERATOR(__last), __result);
-  }
+    {
+      return std::uninitialized_copy
+	(_GLIBCXX_MAKE_MOVE_ITERATOR(__first),
+	 _GLIBCXX_MAKE_MOVE_ITERATOR(__last), __result);
+    }
 
   template <typename _InputIterator, typename _Size, typename _ForwardIterator>
     inline pair<_InputIterator, _ForwardIterator>
     uninitialized_move_n(_InputIterator __first, _Size __count,
 			 _ForwardIterator __result)
-  {
-    auto __res = std::__uninitialized_copy_n_pair
-      (_GLIBCXX_MAKE_MOVE_ITERATOR(__first),
-       __count, __result);
-    return {__res.first.base(), __res.second};
-  }
+    {
+      auto __res = std::__uninitialized_copy_n_pair
+	(_GLIBCXX_MAKE_MOVE_ITERATOR(__first),
+	 __count, __result);
+      return {__res.first.base(), __res.second};
+    }
+#endif // C++17
 
-  template <typename _Tp>
+#if __cplusplus >= 201103L
+  template<typename _Tp, typename _Up, typename _Allocator>
     inline void
-    destroy_at(_Tp* __location)
-  {
-    std::_Destroy(__location);
-  }
+    __relocate_object_a(_Tp* __dest, _Up* __orig, _Allocator& __alloc)
+    noexcept(noexcept(std::allocator_traits<_Allocator>::construct(__alloc,
+			 __dest, std::move(*__orig)))
+	     && noexcept(std::allocator_traits<_Allocator>::destroy(
+			    __alloc, std::__addressof(*__orig))))
+    {
+      typedef std::allocator_traits<_Allocator> __traits;
+      __traits::construct(__alloc, __dest, std::move(*__orig));
+      __traits::destroy(__alloc, std::__addressof(*__orig));
+    }
 
-  template <typename _ForwardIterator>
-    inline void
-    destroy(_ForwardIterator __first, _ForwardIterator __last)
-  {
-    std::_Destroy(__first, __last);
-  }
+  // This class may be specialized for specific types.
+  // Also known as is_trivially_relocatable.
+  template<typename _Tp, typename = void>
+    struct __is_bitwise_relocatable
+    : is_trivial<_Tp> { };
 
-  template <typename _ForwardIterator, typename _Size>
+  template <typename _Tp, typename _Up>
+    inline __enable_if_t<std::__is_bitwise_relocatable<_Tp>::value, _Tp*>
+    __relocate_a_1(_Tp* __first, _Tp* __last,
+		   _Tp* __result, allocator<_Up>&) noexcept
+    {
+      ptrdiff_t __count = __last - __first;
+      if (__count > 0)
+	__builtin_memmove(__result, __first, __count * sizeof(_Tp));
+      return __result + __count;
+    }
+
+  template <typename _InputIterator, typename _ForwardIterator,
+	    typename _Allocator>
     inline _ForwardIterator
-    destroy_n(_ForwardIterator __first, _Size __count)
-  {
-    return std::_Destroy_n(__first, __count);
-  }
+    __relocate_a_1(_InputIterator __first, _InputIterator __last,
+		   _ForwardIterator __result, _Allocator& __alloc)
+    noexcept(noexcept(std::__relocate_object_a(std::addressof(*__result),
+					       std::addressof(*__first),
+					       __alloc)))
+    {
+      typedef typename iterator_traits<_InputIterator>::value_type
+	_ValueType;
+      typedef typename iterator_traits<_ForwardIterator>::value_type
+	_ValueType2;
+      static_assert(std::is_same<_ValueType, _ValueType2>::value,
+	  "relocation is only possible for values of the same type");
+      _ForwardIterator __cur = __result;
+      for (; __first != __last; ++__first, (void)++__cur)
+	std::__relocate_object_a(std::__addressof(*__cur),
+				 std::__addressof(*__first), __alloc);
+      return __cur;
+    }
 
+  template <typename _InputIterator, typename _ForwardIterator,
+	    typename _Allocator>
+    inline _ForwardIterator
+    __relocate_a(_InputIterator __first, _InputIterator __last,
+		 _ForwardIterator __result, _Allocator& __alloc)
+    noexcept(noexcept(__relocate_a_1(std::__niter_base(__first),
+				     std::__niter_base(__last),
+				     std::__niter_base(__result), __alloc)))
+    {
+      return __relocate_a_1(std::__niter_base(__first),
+			    std::__niter_base(__last),
+			    std::__niter_base(__result), __alloc);
+    }
 #endif
-
 
 _GLIBCXX_END_NAMESPACE_VERSION
 } // namespace

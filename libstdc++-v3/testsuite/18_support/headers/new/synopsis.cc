@@ -1,6 +1,6 @@
 // { dg-do compile { target c++11 } }
 
-// Copyright (C) 2007-2016 Free Software Foundation, Inc.
+// Copyright (C) 2007-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -30,8 +30,10 @@ namespace std {
 
 #if __cplusplus > 201402L
   enum class align_val_t : size_t;
-  // static constexpr size_t hardware_destructive_interference_size;
-  // static constexpr size_t hardware_constructive_interference_size;
+  // _GLIBCXX17_INLINE constexpr size_t
+  //    hardware_destructive_interference_size;
+  // _GLIBCXX17_INLINE constexpr size_t
+  //    hardware_constructive_interference_size;
 #endif
 }
 

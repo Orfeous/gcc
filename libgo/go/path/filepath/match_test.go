@@ -6,9 +6,11 @@ package filepath_test
 
 import (
 	"fmt"
+	"internal/testenv"
 	"io/ioutil"
 	"os"
 	. "path/filepath"
+	"reflect"
 	"runtime"
 	"sort"
 	"strings"
@@ -104,7 +106,7 @@ func TestMatch(t *testing.T) {
 	}
 }
 
-// contains returns true if vector contains the string s.
+// contains reports whether vector contains the string s.
 func contains(vector []string, s string) bool {
 	for _, elem := range vector {
 		if elem == s {
@@ -154,8 +156,8 @@ func TestGlob(t *testing.T) {
 }
 
 func TestGlobError(t *testing.T) {
-	_, err := Glob("[7]")
-	if err != nil {
+	_, err := Glob("[]")
+	if err == nil {
 		t.Error("expected error for bad pattern; got none")
 	}
 }
@@ -175,15 +177,7 @@ var globSymlinkTests = []struct {
 }
 
 func TestGlobSymlink(t *testing.T) {
-	switch runtime.GOOS {
-	case "android", "nacl", "plan9":
-		t.Skipf("skipping on %s", runtime.GOOS)
-	case "windows":
-		if !supportsSymlinks {
-			t.Skipf("skipping on %s", runtime.GOOS)
-		}
-
-	}
+	testenv.MustHaveSymlink(t)
 
 	tmpDir, err := ioutil.TempDir("", "globsymlink")
 	if err != nil {
@@ -377,5 +371,20 @@ func TestWindowsGlob(t *testing.T) {
 		if err != nil {
 			t.Error(err)
 		}
+	}
+}
+
+func TestNonWindowsGlobEscape(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skipf("skipping non-windows specific test")
+	}
+	pattern := `\match.go`
+	want := []string{"match.go"}
+	matches, err := Glob(pattern)
+	if err != nil {
+		t.Fatalf("Glob error for %q: %s", pattern, err)
+	}
+	if !reflect.DeepEqual(matches, want) {
+		t.Fatalf("Glob(%#q) = %v want %v", pattern, matches, want)
 	}
 }

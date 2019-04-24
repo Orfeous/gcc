@@ -8,42 +8,34 @@ import (
 	"unsafe"
 )
 
-// Temporary for C code to call:
+// For C code to call:
 //go:linkname minit runtime.minit
+
+func goenvs() {
+	goenvs_unix()
+}
+
+// Called to initialize a new m (including the bootstrap m).
+// Called on the parent thread (main thread in case of bootstrap), can allocate memory.
+func mpreinit(mp *m) {
+	mp.gsignal = malg(true, true, &mp.gsignalstack, &mp.gsignalstacksize)
+	mp.gsignal.m = mp
+}
 
 // minit is called to initialize a new m (including the bootstrap m).
 // Called on the new thread, cannot allocate memory.
 func minit() {
-	// Initialize signal handling.
-	_g_ := getg()
+	minitSignals()
 
-	var st _stack_t
-	sigaltstack(nil, &st)
-	if st.ss_flags&_SS_DISABLE != 0 {
-		signalstack(_g_.m.gsignalstack, _g_.m.gsignalstacksize)
-		_g_.m.newSigstack = true
-	} else {
-		_g_.m.newSigstack = false
-	}
-
-	// FIXME: We should set _g_.m.procid here.
-
-	// restore signal mask from m.sigmask and unblock essential signals
-	nmask := _g_.m.sigmask
-	for i := range sigtable {
-		if sigtable[i].flags&_SigUnblock != 0 {
-			sigdelset(&nmask, int32(i))
-		}
-	}
-	sigprocmask(_SIG_SETMASK, &nmask, nil)
+	// FIXME: only works on linux for now.
+	getg().m.procid = uint64(gettid())
 }
 
 // Called from dropm to undo the effect of an minit.
 //go:nosplit
+//go:nowritebarrierrec
 func unminit() {
-	if getg().m.newSigstack {
-		signalstack(nil, 0)
-	}
+	unminitSignals()
 }
 
 var urandom_dev = []byte("/dev/urandom\x00")

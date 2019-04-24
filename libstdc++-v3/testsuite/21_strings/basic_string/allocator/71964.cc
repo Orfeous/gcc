@@ -1,4 +1,4 @@
-// Copyright (C) 2016 Free Software Foundation, Inc.
+// Copyright (C) 2016-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -45,6 +45,17 @@ template<typename T>
 
     bool moved_to;
     bool moved_from;
+
+#if ! _GLIBCXX_USE_CXX11_ABI
+    // COW string doesn't use allocator_traits, requires C++03 allocator API.
+    using pointer = T*;
+    using const_pointer = const T*;
+    using difference_type = int;
+    template<typename U> struct rebind { using other = mv_allocator<U>; };
+    void construct(pointer p, const T& val) { ::new(p) T(val); }
+    void destroy(pointer p) { p->~T(); }
+    size_type max_size() const { return std::allocator<T>().max_size(); }
+#endif
   };
 
 template<typename T, typename U>
@@ -58,13 +69,10 @@ operator!=(const mv_allocator<T>&, const mv_allocator<U>&) { return false; }
 void
 test01()
 {
-  // COW strings don't support C++11 allocators
-#if _GLIBCXX_USE_CXX11_ABI
   std::basic_string<char, std::char_traits<char>, mv_allocator<char>> s;
   auto t = std::move(s);
   VERIFY( s.get_allocator().moved_from );
   VERIFY( t.get_allocator().moved_to );
-#endif
 }
 
 int

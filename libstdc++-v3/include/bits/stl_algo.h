@@ -1,6 +1,6 @@
 // Algorithm implementation -*- C++ -*-
 
-// Copyright (C) 2001-2016 Free Software Foundation, Inc.
+// Copyright (C) 2001-2019 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -180,7 +180,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
     _InputIterator
     __find_if_not_n(_InputIterator __first, _Distance& __len, _Predicate __pred)
     {
-      for (; __len; --__len, ++__first)
+      for (; __len; --__len,  (void) ++__first)
 	if (!__pred(__first))
 	  break;
       return __first;
@@ -583,6 +583,9 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 		   _Predicate __pred)
     {
       __first = std::find_if_not(__first, __last, __pred);
+      if (__first == __last)
+	return true;
+      ++__first;
       return std::none_of(__first, __last, __pred);
     }
 
@@ -1248,11 +1251,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	     _ForwardIterator __last,
 	     forward_iterator_tag)
     {
-      if (__first == __middle)
-	return __last;
-      else if (__last  == __middle)
-	return __first;
-
       _ForwardIterator __first2 = __middle;
       do
 	{
@@ -1293,11 +1291,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       __glibcxx_function_requires(_Mutable_BidirectionalIteratorConcept<
 				  _BidirectionalIterator>)
 
-      if (__first == __middle)
-	return __last;
-      else if (__last  == __middle)
-	return __first;
-
       std::__reverse(__first,  __middle, bidirectional_iterator_tag());
       std::__reverse(__middle, __last,   bidirectional_iterator_tag());
 
@@ -1330,11 +1323,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       // concept requirements
       __glibcxx_function_requires(_Mutable_RandomAccessIteratorConcept<
 				  _RandomAccessIterator>)
-
-      if (__first == __middle)
-	return __last;
-      else if (__last  == __middle)
-	return __first;
 
       typedef typename iterator_traits<_RandomAccessIterator>::difference_type
 	_Distance;
@@ -1436,6 +1424,11 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 				  _ForwardIterator>)
       __glibcxx_requires_valid_range(__first, __middle);
       __glibcxx_requires_valid_range(__middle, __last);
+
+      if (__first == __middle)
+	return __last;
+      else if (__last  == __middle)
+	return __first;
 
       return std::__rotate(__first, __middle, __last,
 			   std::__iterator_category(__first));
@@ -1598,9 +1591,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 					   __right_len,
 					   __buffer, __buffer_size);
 
-      std::rotate(__left_split, __middle, __right_split);
-      std::advance(__left_split, std::distance(__middle, __right_split));
-      return __left_split;
+      return std::rotate(__left_split, __middle, __right_split);
     }
 
   template<typename _ForwardIterator, typename _Predicate>
@@ -1618,7 +1609,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       typedef typename iterator_traits<_ForwardIterator>::difference_type
 	_DistanceType;
 
-      _Temporary_buffer<_ForwardIterator, _ValueType> __buf(__first, __last);
+      _Temporary_buffer<_ForwardIterator, _ValueType>
+	__buf(__first, std::distance(__first, __last));
       return
 	std::__stable_partition_adaptive(__first, __last, __pred,
 					 _DistanceType(__buf.requested_size()),
@@ -2398,11 +2390,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	    return __last;
 	}
       else
-	{
-	  std::rotate(__first, __middle, __last);
-	  std::advance(__first, std::distance(__middle, __last));
-	  return __first;
-	}
+	return std::rotate(__first, __middle, __last);
     }
 
   /// This is a helper function for the merge routines.
@@ -2509,9 +2497,8 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 	  __len11 = std::distance(__first, __first_cut);
 	}
 
-      std::rotate(__first_cut, __middle, __second_cut);
-      _BidirectionalIterator __new_middle = __first_cut;
-      std::advance(__new_middle, std::distance(__middle, __second_cut));
+      _BidirectionalIterator __new_middle
+	= std::rotate(__first_cut, __middle, __second_cut);
       std::__merge_without_buffer(__first, __first_cut, __new_middle,
 				  __len11, __len22, __comp);
       std::__merge_without_buffer(__new_middle, __second_cut, __last,
@@ -2537,7 +2524,7 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
       const _DistanceType __len2 = std::distance(__middle, __last);
 
       typedef _Temporary_buffer<_BidirectionalIterator, _ValueType> _TmpBuf;
-      _TmpBuf __buf(__first, __last);
+      _TmpBuf __buf(__first, __len1 + __len2);
 
       if (__buf.begin() == 0)
 	std::__merge_without_buffer
@@ -3854,8 +3841,6 @@ _GLIBCXX_BEGIN_NAMESPACE_VERSION
 
 #endif // C++11
 
-_GLIBCXX_END_NAMESPACE_VERSION
-
 _GLIBCXX_BEGIN_NAMESPACE_ALGO
 
   /**
@@ -4255,6 +4240,20 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
 		__gnu_cxx::__ops::__iter_comp_val(__binary_pred, __val));
     }
 
+#if __cplusplus > 201402L
+  /** @brief Search a sequence using a Searcher object.
+   *
+   *  @param  __first        A forward iterator.
+   *  @param  __last         A forward iterator.
+   *  @param  __searcher     A callable object.
+   *  @return @p __searcher(__first,__last).first
+  */
+  template<typename _ForwardIterator, typename _Searcher>
+    inline _ForwardIterator
+    search(_ForwardIterator __first, _ForwardIterator __last,
+	   const _Searcher& __searcher)
+    { return __searcher(__first, __last).first; }
+#endif
 
   /**
    *  @brief Perform an operation on a sequence.
@@ -4447,7 +4446,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
 	    __typeof__(__gen())>)
 
       for (__decltype(__n + 0) __niter = __n;
-	   __niter > 0; --__niter, ++__first)
+	   __niter > 0; --__niter, (void) ++__first)
 	*__first = __gen();
       return __first;
     }
@@ -4983,7 +4982,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
 	_DistanceType;
 
       typedef _Temporary_buffer<_RandomAccessIterator, _ValueType> _TmpBuf;
-      _TmpBuf __buf(__first, __last);
+      _TmpBuf __buf(__first, std::distance(__first, __last));
 
       if (__buf.begin() == 0)
 	std::__inplace_stable_sort(__first, __last, __comp);
@@ -5100,6 +5099,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
    *  @param  __last1   End of first range.
    *  @param  __first2  Start of second range.
    *  @param  __last2   End of second range.
+   *  @param  __result  Start of output range.
    *  @return  End of the output range.
    *  @ingroup set_algorithms
    *
@@ -5148,6 +5148,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
    *  @param  __last1   End of first range.
    *  @param  __first2  Start of second range.
    *  @param  __last2   End of second range.
+   *  @param  __result  Start of output range.
    *  @param  __comp    The comparison functor.
    *  @return  End of the output range.
    *  @ingroup set_algorithms
@@ -5220,6 +5221,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
    *  @param  __last1   End of first range.
    *  @param  __first2  Start of second range.
    *  @param  __last2   End of second range.
+   *  @param  __result  Start of output range.
    *  @return  End of the output range.
    *  @ingroup set_algorithms
    *
@@ -5266,6 +5268,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
    *  @param  __last1   End of first range.
    *  @param  __first2  Start of second range.
    *  @param  __last2   End of second range.
+   *  @param  __result  Start of output range.
    *  @param  __comp    The comparison functor.
    *  @return  End of the output range.
    *  @ingroup set_algorithms
@@ -5338,6 +5341,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
    *  @param  __last1   End of first range.
    *  @param  __first2  Start of second range.
    *  @param  __last2   End of second range.
+   *  @param  __result  Start of output range.
    *  @return  End of the output range.
    *  @ingroup set_algorithms
    *
@@ -5386,6 +5390,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
    *  @param  __last1   End of first range.
    *  @param  __first2  Start of second range.
    *  @param  __last2   End of second range.
+   *  @param  __result  Start of output range.
    *  @param  __comp    The comparison functor.
    *  @return  End of the output range.
    *  @ingroup set_algorithms
@@ -5468,6 +5473,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
    *  @param  __last1   End of first range.
    *  @param  __first2  Start of second range.
    *  @param  __last2   End of second range.
+   *  @param  __result  Start of output range.
    *  @return  End of the output range.
    *  @ingroup set_algorithms
    *
@@ -5516,6 +5522,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
    *  @param  __last1   End of first range.
    *  @param  __first2  Start of second range.
    *  @param  __last2   End of second range.
+   *  @param  __result  Start of output range.
    *  @param  __comp    The comparison functor.
    *  @return  End of the output range.
    *  @ingroup set_algorithms
@@ -5745,11 +5752,11 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
         {
 	  while (__n != 0 && __unsampled_sz >= 2)
 	    {
-	      const pair<_Size, _Size> p =
+	      const pair<_Size, _Size> __p =
 		__gen_two_uniform_ints(__unsampled_sz, __unsampled_sz - 1, __g);
 
 	      --__unsampled_sz;
-	      if (p.first < __n)
+	      if (__p.first < __n)
 		{
 		  *__out++ = *__first;
 		  --__n;
@@ -5760,7 +5767,7 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
 	      if (__n == 0) break;
 
 	      --__unsampled_sz;
-	      if (p.second < __n)
+	      if (__p.second < __n)
 		{
 		  *__out++ = *__first;
 		  --__n;
@@ -5806,13 +5813,15 @@ _GLIBCXX_BEGIN_NAMESPACE_ALGO
 		    "sample size must be an integer type");
 
       typename iterator_traits<_PopulationIterator>::difference_type __d = __n;
-      return std::__sample(__first, __last, __pop_cat{}, __out, __samp_cat{},
-			   __d, std::forward<_UniformRandomBitGenerator>(__g));
+      return _GLIBCXX_STD_A::
+	__sample(__first, __last, __pop_cat{}, __out, __samp_cat{}, __d,
+		 std::forward<_UniformRandomBitGenerator>(__g));
     }
 #endif // C++17
 #endif // C++14
 
 _GLIBCXX_END_NAMESPACE_ALGO
+_GLIBCXX_END_NAMESPACE_VERSION
 } // namespace std
 
 #endif /* _STL_ALGO_H */
