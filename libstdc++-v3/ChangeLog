@@ -1,4 +1,156 @@
+2019-05-21  Thomas Rodgers  <trodgers@redhat.com>
+
+	LWG 3062 - Unnecessary decay_t in is_execution_policy_v
+	* include/pstl/execution_defs.h (__enable_if_execution_policy):
+	Use std::__remove_cvref_t when building with GCC.
+
+2019-05-21  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/90252
+	* testsuite/lib/libstdc++.exp (check_effective_target_tbb-backend):
+	Use "additional_flags" to pass -ltbb to v3_target_compile command.
+	Use check_v3_target_prop_cached to cache the result of the test.
+
+	* doc/xml/manual/shared_ptr.xml: Fix names of lock policy constants.
+
+2019-05-20  Thomas Rodgers  <trodgers@redhat.com>
+
+	PR libstdc++/90252
+	* testsuite/lib/libstdc++.exp (check_effective_target_tbb-backend):
+	Changed v3_target_compile check from preprocess to executable.
+	Added "-ltbb" to v3_target_compile flags.
+
+2019-05-20  Thomas Rodgers  <trodgers@redhat.com>
+
+	* testsuite/lib/libstdc++.exp (check_effective_target_tbb-backend):
+	Add check for Thread Building Blocks 2018 or later.
+
+2019-05-20  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/experimental/names.cc: Only include Networking TS headers
+	on targets with the necessary Gthreads support.
+
+2019-05-20  Marek Polacek  <polacek@redhat.com>
+
+	CWG 2094 - volatile scalars are trivially copyable.
+	PR c++/85679
+	* testsuite/20_util/is_trivially_copyable/value.cc: Change the expected
+	result for volatile int.
+
+2019-05-20  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/17_intro/names.cc: Do not check 'ptr' on Solaris.
+	* testsuite/experimental/names.cc: Include <experimental/filesystem>
+	conditionally.
+
+	PR c++/90532 Ensure __is_constructible(T[]) is false
+	* include/std/type_traits (__do_is_default_constructible_impl)
+	(__is_default_constructible_atom, __is_default_constructible_safe):
+	Remove.
+	(is_default_constructible): Use is_constructible.
+	* testsuite/20_util/is_constructible/value.cc: Check int[] case.
+	* testsuite/20_util/is_default_constructible/value.cc: Likewise.
+	* testsuite/20_util/is_trivially_constructible/value.cc: Likewise.
+	* testsuite/20_util/is_trivially_default_constructible/value.cc:
+	Likewise.
+
+2019-05-20  Pádraig Brady  <pbrady@fb.com>
+
+	* libstdc++-v3/include/ext/new_allocator.h (deallocate): Pass the size
+	to the deallocator with -fsized-deallocation.
+
+2019-05-20  Jonathan Wakely  <jwakely@redhat.com>
+
+	* testsuite/experimental/memory_resource/new_delete_resource.cc: Fix
+	test by passing correct alignment to deallocate function.
+
+2019-05-18  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/90520
+	* python/libstdcxx/v6/printers.py (UniquePointerPrinter.__init__):
+	Raise exception if unique_ptr tuple member has unknown structure.
+	* python/libstdcxx/v6/xmethods.py (UniquePtrGetWorker.__call__):
+	Adjust worker to support new __uniq_ptr_data base class. Do not
+	assume field called _M_head_impl is the first tuple element.
+
+2019-05-17  François Dumont  <fdumont@gcc.gnu.org>
+
+	* include/bits/stl_deque.h
+	(_Deque_iterator<>::__ptr_to): Remove, use std::__ptr_rebind.
+	(_Deque_base(_Deque_base&&, const allocator_type&)): New.
+	(_Deque_base::_Deque_impl_data): New.
+	(_Deque_base::_Deque_impl): Inherit latter.
+	(_Deque_base::_Deque_impl::_M_swap_data): Move...
+	(_Deque_base::_Deque_impl_data::_M_swap_data): ... here.
+	(_Deque_base::_Deque_impl()): Add noexcept qualification.
+	(_Deque_base::_Deque_impl(_Deque_impl&&, _Tp_alloc_type&&)): New.
+	(_Deque_base::_Deque_impl::_M_get_Tp_allocator()): Remove static_cast.
+	(deque<>::deque()): Default.
+	(deque<>::deque(deque&&)): Default.
+	(deque<>::deque(deque&&, const allocator_type&, false_type)): New.
+	(deque<>::deque(deque&&, const allocator_type&, true_type)): New.
+	(deque<>::deque(deque&&, const allocator_type&)): Delegate to latters.
+	(deque<>::deque<_It>(_It, _It, const allocator_type&)): Use
+	_M_range_initialize.
+	(deque<>::assign<_It>(_It, _It)): Use _M_assign_aux.
+	(deque<>::resize(size_type, const value_type&)): Share a single
+	implementation.
+	(deque<>::insert<_It>(const_iterator, _It, _It)): Use
+	_M_range_insert_aux.
+	[__cplusplus >= 201103L](_M_initialize_dispatch): Remove.
+	[__cplusplus >= 201103L](_M_assign_dispatch): Remove.
+	[__cplusplus >= 201103L](_M_insert_dispatch): Remove.
+	* testsuite/23_containers/deque/allocator/default_init.cc: New.
+
 2019-05-17  Jonathan Wakely  <jwakely@redhat.com>
+
+	PR libstdc++/90246
+	* include/std/variant (holds_alternative, get, get_if): Improve
+	static assertion messages.
+	(bad_variant_access::bad_variant_access()): Change default message.
+	(__throw_bad_variant_access(bool)): New overload.
+	(get): Use new overload.
+	(visit, visit<R>): Improve exception message.
+
+	* testsuite/20_util/variant/compile.cc: Fix narrowing test for ILP32
+	targets. Add more cases from P0608R3.
+	* testsuite/20_util/variant/run.cc: Add more cases from P0608R3.
+
+	* include/bits/random.h (seed_seq::param): Fix non-reserved name.
+	* include/experimental/type_traits (is_detected_exact)
+	(is_detected_exact_v): Likewise.
+	* include/pstl/execution_defs.h (is_execution_policy)
+	(is_execution_policy_v, __enable_if_execution_policy): Likewise.
+	* include/pstl/execution_impl.h (__policy_traits): Likewise.
+	* testsuite/17_intro/names.cc: Check for more non-reserved names.
+	* testsuite/experimental/names.cc: New test.
+
+	PR libstdc++/85965
+	* include/bits/hashtable.h (_Hashtable::~_Hashtable()): Remove static
+	assertions from the destructor.
+	* include/bits/hashtable_policy.h (_Hash_code_base::_M_hash_code):
+	Move static_assert for hash function to here.
+	(_Hash_table_base::_M_equals): Move static_assert for equality
+	predicate to here.
+	* include/bits/stl_tree.h (_Rb_tree::_S_value(_Const_Link_type)):
+	Remove.
+	(_Rb_tree::_S_key(_Const_Link_type)): Move assertions here. Access
+	the value directly instead of calling _S_value.
+	(_Rb_tree::_S_value(_Const_Base_ptr)): Remove.
+	(_Rb_tree::_S_key(_Const_Base_ptr)): Do downcast and forward to
+	_S_key(_Const_Link_type).
+	* testsuite/23_containers/set/85965.cc: Check construction,
+	destruction, assignment and size() do not trigger the assertions.
+	* testsuite/23_containers/unordered_set/85965.cc: Likewise.
+	* testsuite/23_containers/map/48101_neg.cc: Call find and adjust
+	expected errors.
+	* testsuite/23_containers/multimap/48101_neg.cc: Likewise.
+	* testsuite/23_containers/multiset/48101_neg.cc: Likewise.
+	* testsuite/23_containers/set/48101_neg.cc: Likewise.
+	* testsuite/23_containers/unordered_map/48101_neg.cc: Likewise.
+	* testsuite/23_containers/unordered_multimap/48101_neg.cc: Likewise.
+	* testsuite/23_containers/unordered_multiset/48101_neg.cc: Likewise.
+	* testsuite/23_containers/unordered_set/48101_neg.cc: Likewise.
 
 	* include/bits/invoke.h [__cplusplus < 201703L] (__invoke_r<void>):
 	Use _GLIBCXX14_CONSTEXPR because void functions cannot be constexpr
