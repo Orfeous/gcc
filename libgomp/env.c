@@ -1425,7 +1425,5 @@ initialize_env (void)
   parse_gomp_openacc_dim ();
 
   goacc_runtime_initialize ();
-
-  goacc_profiling_initialize ();
 }
 #endif /* LIBGOMP_OFFLOADED_ONLY */

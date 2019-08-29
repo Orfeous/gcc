@@ -1692,7 +1692,7 @@ lra_assign (bool &fails_p)
       && (lra_assignment_iter_after_spill
 	  > LRA_MAX_ASSIGNMENT_ITERATION_NUMBER))
     internal_error
-      ("maximum number of LRA assignment passes is achieved (%d)",
+      ("Maximum number of LRA assignment passes is achieved (%d)\n",
        LRA_MAX_ASSIGNMENT_ITERATION_NUMBER);
   return no_spills_p;
 }

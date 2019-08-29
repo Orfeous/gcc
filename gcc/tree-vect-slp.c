@@ -2983,7 +2983,7 @@ vect_slp_bb (basic_block bb)
 
   /* Autodetect first vector size we try.  */
   current_vector_size = 0;
-  targetm.vectorize.autovectorize_vector_sizes (&vector_sizes, false);
+  targetm.vectorize.autovectorize_vector_sizes (&vector_sizes);
   unsigned int next_size = 0;
 
   gsi = gsi_start_bb (bb);

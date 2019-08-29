@@ -37,23 +37,10 @@ acc_get_current_cuda_device (void)
 {
   struct goacc_thread *thr = goacc_thread ();
 
-  void *ret = NULL;
   if (thr && thr->dev && thr->dev->openacc.cuda.get_current_device_func)
-    {
-      acc_prof_info prof_info;
-      acc_api_info api_info;
-      bool profiling_p = GOACC_PROFILING_SETUP_P (thr, &prof_info, &api_info);
+    return thr->dev->openacc.cuda.get_current_device_func ();
 
-      ret = thr->dev->openacc.cuda.get_current_device_func ();
-
-      if (profiling_p)
-	{
-	  thr->prof_info = NULL;
-	  thr->api_info = NULL;
-	}
-    }
-
-  return ret;
+  return NULL;
 }
 
 void *
@@ -61,23 +48,10 @@ acc_get_current_cuda_context (void)
 {
   struct goacc_thread *thr = goacc_thread ();
 
-  void *ret = NULL;
   if (thr && thr->dev && thr->dev->openacc.cuda.get_current_context_func)
-    {
-      acc_prof_info prof_info;
-      acc_api_info api_info;
-      bool profiling_p = GOACC_PROFILING_SETUP_P (thr, &prof_info, &api_info);
-
-      ret = thr->dev->openacc.cuda.get_current_context_func ();
-
-      if (profiling_p)
-	{
-	  thr->prof_info = NULL;
-	  thr->api_info = NULL;
-	}
-    }
-
-  return ret;
+    return thr->dev->openacc.cuda.get_current_context_func ();
+ 
+  return NULL;
 }
 
 void *
@@ -88,32 +62,14 @@ acc_get_cuda_stream (int async)
   if (!async_valid_p (async))
     return NULL;
 
-  void *ret = NULL;
   if (thr && thr->dev && thr->dev->openacc.cuda.get_stream_func)
     {
       goacc_aq aq = lookup_goacc_asyncqueue (thr, false, async);
-      if (!aq)
-	return ret;
-
-      acc_prof_info prof_info;
-      acc_api_info api_info;
-      bool profiling_p = GOACC_PROFILING_SETUP_P (thr, &prof_info, &api_info);
-      if (profiling_p)
-	{
-	  prof_info.async = async;
-	  prof_info.async_queue = prof_info.async;
-	}
-
-      ret = thr->dev->openacc.cuda.get_stream_func (aq);
-
-      if (profiling_p)
-	{
-	  thr->prof_info = NULL;
-	  thr->api_info = NULL;
-	}
+      if (aq)
+	return thr->dev->openacc.cuda.get_stream_func (aq);
     }
-
-  return ret;
+ 
+  return NULL;
 }
 
 int
@@ -131,15 +87,6 @@ acc_set_cuda_stream (int async, void *stream)
   int ret = -1;
   if (thr && thr->dev && thr->dev->openacc.cuda.set_stream_func)
     {
-      acc_prof_info prof_info;
-      acc_api_info api_info;
-      bool profiling_p = GOACC_PROFILING_SETUP_P (thr, &prof_info, &api_info);
-      if (profiling_p)
-	{
-	  prof_info.async = async;
-	  prof_info.async_queue = prof_info.async;
-	}
-
       goacc_aq aq = get_goacc_asyncqueue (async);
       /* Due to not using an asyncqueue for "acc_async_sync", this cannot be
 	 used to change the CUDA stream associated with "acc_async_sync".  */
@@ -148,19 +95,11 @@ acc_set_cuda_stream (int async, void *stream)
 	  assert (async == acc_async_sync);
 	  gomp_debug (0, "Refusing request to set CUDA stream associated"
 		      " with \"acc_async_sync\"\n");
-	  ret = 0;
-	  goto out_prof;
+	  return 0;
 	}
       gomp_mutex_lock (&thr->dev->openacc.async.lock);
       ret = thr->dev->openacc.cuda.set_stream_func (aq, stream);
       gomp_mutex_unlock (&thr->dev->openacc.async.lock);
-
-    out_prof:
-      if (profiling_p)
-	{
-	  thr->prof_info = NULL;
-	  thr->api_info = NULL;
-	}
     }
 
   return ret;

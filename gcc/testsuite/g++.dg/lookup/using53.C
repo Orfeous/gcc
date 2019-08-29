@@ -49,5 +49,5 @@ void
 f ()
 {
   using N::i;
-  using N::i;       // { dg-error "redeclaration" }
+  using N::i;       // { dg-error "declared" }
 }

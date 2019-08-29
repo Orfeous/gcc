@@ -27,7 +27,6 @@
    places in the OpenMP API do not make any provision for failure, so in
    general we cannot allow memory allocation to fail.  */
 
-#define _GNU_SOURCE
 #include "libgomp.h"
 #include <stdlib.h>
 

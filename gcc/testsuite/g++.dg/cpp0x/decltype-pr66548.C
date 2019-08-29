@@ -19,3 +19,4 @@ void g ()
 {
   decltype (Meow.purr);        // { dg-error "expected primary-expression" }
 }
+

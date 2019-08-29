@@ -103,6 +103,7 @@ test02()
 
 void
 test03()
+
 {
   using std::max_align_t;
   using std::size_t;
@@ -122,8 +123,7 @@ test03()
   p = r1->allocate(2, alignof(char));
   VERIFY( bytes_allocated == 2 );
   VERIFY( aligned<max_align_t>(p) );
-  r1->deallocate(p, 2, alignof(char));
-  __builtin_printf("%d\n", (int)bytes_allocated);
+  r1->deallocate(p, 2);
   VERIFY( bytes_allocated == 0 );
 
   p = r1->allocate(3, alignof(short));

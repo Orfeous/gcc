@@ -1525,7 +1525,7 @@ ix86_function_type_abi (const_tree fntype)
       static int warned;
       if (TARGET_X32 && !warned)
 	{
-	  error ("X32 does not support %<ms_abi%> attribute");
+	  error ("X32 does not support ms_abi attribute");
 	  warned = 1;
 	}
 
@@ -1559,8 +1559,7 @@ ix86_function_ms_hook_prologue (const_tree fn)
     {
       if (decl_function_context (fn) != NULL_TREE)
 	error_at (DECL_SOURCE_LOCATION (fn),
-		  "%<ms_hook_prologue%> attribute is not compatible "
-		  "with nested function");
+		  "ms_hook_prologue is not compatible with nested function");
       else
         return true;
     }
@@ -2267,7 +2266,7 @@ classify_argument (machine_mode mode, const_tree type,
 		{
 		  warned = true;
 		  inform (input_location,
-			  "the ABI of passing union with %<long double%>"
+			  "the ABI of passing union with long double"
 			  " has changed in GCC 4.4");
 		}
 	      return 0;
@@ -2385,7 +2384,7 @@ classify_argument (machine_mode mode, const_tree type,
 	    {
 	      warned = true;
 	      inform (input_location,
-		      "the ABI of passing structure with %<complex float%>"
+		      "the ABI of passing structure with complex float"
 		      " member has changed in GCC 4.4");
 	    }
 	  classes[1] = X86_64_SSESF_CLASS;
@@ -7788,7 +7787,7 @@ ix86_expand_prologue (void)
       /* Check if profiling is active and we shall use profiling before
          prologue variant. If so sorry.  */
       if (crtl->profile && flag_fentry != 0)
-	sorry ("%<ms_hook_prologue%> attribute is not compatible "
+        sorry ("ms_hook_prologue attribute isn%'t compatible "
 	       "with %<-mfentry%> for 32-bit");
 
       /* In ix86_asm_output_function_label we emitted:
@@ -17297,7 +17296,7 @@ ix86_gimple_fold_builtin (gimple_stmt_iterator *gsi)
   int n_args = gimple_call_num_args (stmt);
   enum ix86_builtins fn_code = (enum ix86_builtins) DECL_FUNCTION_CODE (fndecl);
   tree decl = NULL_TREE;
-  tree arg0, arg1, arg2;
+  tree arg0, arg1;
   enum rtx_code rcode;
   unsigned HOST_WIDE_INT count;
   bool is_vshift;
@@ -17599,32 +17598,6 @@ ix86_gimple_fold_builtin (gimple_stmt_iterator *gsi)
 	  gsi_replace (gsi, g, false);
 	  return true;
 	}
-      break;
-
-    case IX86_BUILTIN_SHUFPD:
-      arg2 = gimple_call_arg (stmt, 2);
-      if (TREE_CODE (arg2) == INTEGER_CST)
-	{
-	  location_t loc = gimple_location (stmt);
-	  unsigned HOST_WIDE_INT imask = TREE_INT_CST_LOW (arg2);
-	  arg0 = gimple_call_arg (stmt, 0);
-	  arg1 = gimple_call_arg (stmt, 1);
-	  tree itype = long_long_integer_type_node;
-	  tree vtype = build_vector_type (itype, 2); /* V2DI */
-	  tree_vector_builder elts (vtype, 2, 1);
-	  /* Ignore bits other than the lowest 2.  */
-	  elts.quick_push (build_int_cst (itype, imask & 1));
-	  imask >>= 1;
-	  elts.quick_push (build_int_cst (itype, 2 + (imask & 1)));
-	  tree omask = elts.build ();
-	  gimple *g = gimple_build_assign (gimple_call_lhs (stmt),
-					   VEC_PERM_EXPR,
-					   arg0, arg1, omask);
-	  gimple_set_location (g, loc);
-	  gsi_replace (gsi, g, false);
-	  return true;
-	}
-      // Do not error yet, the constant could be propagated later?
       break;
 
     default:
@@ -20682,7 +20655,7 @@ ix86_md_asm_adjust (vec<rtx> &outputs, vec<rtx> &/*inputs*/,
       con += 4;
       if (strchr (con, ',') != NULL)
 	{
-	  error ("alternatives not allowed in %<asm%> flag output");
+	  error ("alternatives not allowed in asm flag output");
 	  continue;
 	}
 
@@ -20746,7 +20719,7 @@ ix86_md_asm_adjust (vec<rtx> &outputs, vec<rtx> &/*inputs*/,
 	}
       if (code == UNKNOWN)
 	{
-	  error ("unknown %<asm%> flag output %qs", constraints[i]);
+	  error ("unknown asm flag output %qs", constraints[i]);
 	  continue;
 	}
       if (invert)
@@ -20775,7 +20748,7 @@ ix86_md_asm_adjust (vec<rtx> &outputs, vec<rtx> &/*inputs*/,
       machine_mode dest_mode = GET_MODE (dest);
       if (!SCALAR_INT_MODE_P (dest_mode))
 	{
-	  error ("invalid type for %<asm%> flag output");
+	  error ("invalid type for asm flag output");
 	  continue;
 	}
 
@@ -21358,7 +21331,7 @@ ix86_preferred_simd_mode (scalar_mode mode)
    256bit and 128bit vectors.  */
 
 static void
-ix86_autovectorize_vector_sizes (vector_sizes *sizes, bool all)
+ix86_autovectorize_vector_sizes (vector_sizes *sizes)
 {
   if (TARGET_AVX512F && !TARGET_PREFER_AVX256)
     {
@@ -21366,21 +21339,10 @@ ix86_autovectorize_vector_sizes (vector_sizes *sizes, bool all)
       sizes->safe_push (32);
       sizes->safe_push (16);
     }
-  else if (TARGET_AVX512F && all)
-    {
-      sizes->safe_push (32);
-      sizes->safe_push (16);
-      sizes->safe_push (64);
-    }
   else if (TARGET_AVX && !TARGET_PREFER_AVX128)
     {
       sizes->safe_push (32);
       sizes->safe_push (16);
-    }
-  else if (TARGET_AVX && all)
-    {
-      sizes->safe_push (16);
-      sizes->safe_push (32);
     }
 }
 
@@ -21720,15 +21682,13 @@ ix86_memmodel_check (unsigned HOST_WIDE_INT val)
   if (val & IX86_HLE_ACQUIRE && !(is_mm_acquire (model) || strong))
     {
       warning (OPT_Winvalid_memory_model,
-	      "%<HLE_ACQUIRE%> not used with %<ACQUIRE%> or stronger "
-	       "memory model");
+              "HLE_ACQUIRE not used with ACQUIRE or stronger memory model");
       return MEMMODEL_SEQ_CST | IX86_HLE_ACQUIRE;
     }
   if (val & IX86_HLE_RELEASE && !(is_mm_release (model) || strong))
     {
       warning (OPT_Winvalid_memory_model,
-	      "%<HLE_RELEASE%> not used with %<RELEASE%> or stronger "
-	       "memory model");
+              "HLE_RELEASE not used with RELEASE or stronger memory model");
       return MEMMODEL_SEQ_CST | IX86_HLE_RELEASE;
     }
   return val;
@@ -23099,21 +23059,6 @@ ix86_run_selftests (void)
 #undef TARGET_GET_MULTILIB_ABI_NAME
 #define TARGET_GET_MULTILIB_ABI_NAME \
   ix86_get_multilib_abi_name
-
-static bool ix86_libc_has_fast_function (int fcode ATTRIBUTE_UNUSED)
-{
-#ifdef OPTION_GLIBC
-  if (OPTION_GLIBC)
-    return (built_in_function)fcode == BUILT_IN_MEMPCPY;
-  else
-    return false;
-#else
-  return false;
-#endif
-}
-
-#undef TARGET_LIBC_HAS_FAST_FUNCTION
-#define TARGET_LIBC_HAS_FAST_FUNCTION ix86_libc_has_fast_function
 
 #if CHECKING_P
 #undef TARGET_RUN_TARGET_SELFTESTS

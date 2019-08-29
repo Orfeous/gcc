@@ -1878,9 +1878,7 @@ assemble_start_function (tree decl, const char *fnname)
   if (patch_area_entry > patch_area_size)
     {
       if (patch_area_size > 0)
-	warning (OPT_Wattributes,
-		 "patchable function entry %wu exceeds size %wu",
-		 patch_area_entry, patch_area_size);
+	warning (OPT_Wattributes, "patchable function entry > size");
       patch_area_entry = 0;
     }
 

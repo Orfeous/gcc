@@ -9588,7 +9588,7 @@ mips_dwarf_frame_reg_mode (int regno)
 {
   machine_mode mode = default_dwarf_frame_reg_mode (regno);
 
-  if (FP_REG_P (regno) && mips_abi == ABI_32 && !TARGET_FLOAT32)
+  if (FP_REG_P (regno) && mips_abi == ABI_32 && TARGET_FLOAT64)
     mode = SImode;
 
   return mode;
@@ -13460,7 +13460,7 @@ mips_preferred_simd_mode (scalar_mode mode)
 /* Implement TARGET_VECTORIZE_AUTOVECTORIZE_VECTOR_SIZES.  */
 
 static void
-mips_autovectorize_vector_sizes (vector_sizes *sizes, bool)
+mips_autovectorize_vector_sizes (vector_sizes *sizes)
 {
   if (ISA_HAS_MSA)
     sizes->safe_push (16);

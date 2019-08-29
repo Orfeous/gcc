@@ -2961,12 +2961,12 @@ verify_address (tree t, bool verify_addressable)
 
   if (old_constant != new_constant)
     {
-      error ("constant not recomputed when %<ADDR_EXPR%> changed");
+      error ("constant not recomputed when ADDR_EXPR changed");
       return true;
     }
   if (old_side_effects != new_side_effects)
     {
-      error ("side effects not recomputed when %<ADDR_EXPR%> changed");
+      error ("side effects not recomputed when ADDR_EXPR changed");
       return true;
     }
 
@@ -2981,13 +2981,13 @@ verify_address (tree t, bool verify_addressable)
 
   if (DECL_GIMPLE_REG_P (base))
     {
-      error ("%<DECL_GIMPLE_REG_P%> set on a variable with address taken");
+      error ("DECL_GIMPLE_REG_P set on a variable with address taken");
       return true;
     }
 
   if (verify_addressable && !TREE_ADDRESSABLE (base))
     {
-      error ("address taken but %<TREE_ADDRESSABLE%> bit not set");
+      error ("address taken, but ADDRESSABLE bit not set");
       return true;
     }
 
@@ -3036,8 +3036,6 @@ verify_types_in_gimple_min_lval (tree expr)
 static bool
 verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 {
-  const char *code_name = get_tree_code_name (TREE_CODE (expr));
-
   if (TREE_CODE (expr) == REALPART_EXPR
       || TREE_CODE (expr) == IMAGPART_EXPR
       || TREE_CODE (expr) == BIT_FIELD_REF)
@@ -3045,7 +3043,7 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
       tree op = TREE_OPERAND (expr, 0);
       if (!is_gimple_reg_type (TREE_TYPE (expr)))
 	{
-	  error ("non-scalar %qs", code_name);
+	  error ("non-scalar BIT_FIELD_REF, IMAGPART_EXPR or REALPART_EXPR");
 	  return true;
 	}
 
@@ -3059,14 +3057,14 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 	      || !types_compatible_p (bitsizetype, TREE_TYPE (t1))
 	      || !types_compatible_p (bitsizetype, TREE_TYPE (t2)))
 	    {
-	      error ("invalid position or size operand to %qs", code_name);
+	      error ("invalid position or size operand to BIT_FIELD_REF");
 	      return true;
 	    }
 	  if (INTEGRAL_TYPE_P (TREE_TYPE (expr))
 	      && maybe_ne (TYPE_PRECISION (TREE_TYPE (expr)), size))
 	    {
 	      error ("integral result type precision does not match "
-		     "field size of %qs", code_name);
+		     "field size of BIT_FIELD_REF");
 	      return true;
 	    }
 	  else if (!INTEGRAL_TYPE_P (TREE_TYPE (expr))
@@ -3075,14 +3073,13 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 				size))
 	    {
 	      error ("mode size of non-integral result does not "
-		     "match field size of %qs",
-		     code_name);
+		     "match field size of BIT_FIELD_REF");
 	      return true;
 	    }
 	  if (INTEGRAL_TYPE_P (TREE_TYPE (op))
 	      && !type_has_mode_precision_p (TREE_TYPE (op)))
 	    {
-	      error ("%qs of non-mode-precision operand", code_name);
+	      error ("BIT_FIELD_REF of non-mode-precision operand");
 	      return true;
 	    }
 	  if (!AGGREGATE_TYPE_P (TREE_TYPE (op))
@@ -3090,7 +3087,7 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 			   tree_to_poly_uint64 (TYPE_SIZE (TREE_TYPE (op)))))
 	    {
 	      error ("position plus size exceeds size of referenced object in "
-		     "%qs", code_name);
+		     "BIT_FIELD_REF");
 	      return true;
 	    }
 	}
@@ -3100,7 +3097,7 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 	  && !useless_type_conversion_p (TREE_TYPE (expr),
 					 TREE_TYPE (TREE_TYPE (op))))
 	{
-	  error ("type mismatch in %qs reference", code_name);
+	  error ("type mismatch in real/imagpart reference");
 	  debug_generic_stmt (TREE_TYPE (expr));
 	  debug_generic_stmt (TREE_TYPE (TREE_TYPE (op)));
 	  return true;
@@ -3110,13 +3107,11 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 
   while (handled_component_p (expr))
     {
-      code_name = get_tree_code_name (TREE_CODE (expr));
-
       if (TREE_CODE (expr) == REALPART_EXPR
 	  || TREE_CODE (expr) == IMAGPART_EXPR
 	  || TREE_CODE (expr) == BIT_FIELD_REF)
 	{
-	  error ("non-top-level %qs", code_name);
+	  error ("non-top-level BIT_FIELD_REF, IMAGPART_EXPR or REALPART_EXPR");
 	  return true;
 	}
 
@@ -3131,7 +3126,7 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 	      || (TREE_OPERAND (expr, 3)
 		  && !is_gimple_val (TREE_OPERAND (expr, 3))))
 	    {
-	      error ("invalid operands to %qs", code_name);
+	      error ("invalid operands to array reference");
 	      debug_generic_stmt (expr);
 	      return true;
 	    }
@@ -3142,7 +3137,7 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 	  && !useless_type_conversion_p (TREE_TYPE (expr),
 					 TREE_TYPE (TREE_TYPE (op))))
 	{
-	  error ("type mismatch in %qs", code_name);
+	  error ("type mismatch in array reference");
 	  debug_generic_stmt (TREE_TYPE (expr));
 	  debug_generic_stmt (TREE_TYPE (TREE_TYPE (op)));
 	  return true;
@@ -3151,7 +3146,7 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 	  && !useless_type_conversion_p (TREE_TYPE (TREE_TYPE (expr)),
 					 TREE_TYPE (TREE_TYPE (op))))
 	{
-	  error ("type mismatch in %qs", code_name);
+	  error ("type mismatch in array range reference");
 	  debug_generic_stmt (TREE_TYPE (TREE_TYPE (expr)));
 	  debug_generic_stmt (TREE_TYPE (TREE_TYPE (op)));
 	  return true;
@@ -3162,13 +3157,13 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 	  if (TREE_OPERAND (expr, 2)
 	      && !is_gimple_val (TREE_OPERAND (expr, 2)))
 	    {
-	      error ("invalid %qs offset operator", code_name);
+	      error ("invalid COMPONENT_REF offset operator");
 	      return true;
 	    }
 	  if (!useless_type_conversion_p (TREE_TYPE (expr),
 					  TREE_TYPE (TREE_OPERAND (expr, 1))))
 	    {
-	      error ("type mismatch in %qs", code_name);
+	      error ("type mismatch in component reference");
 	      debug_generic_stmt (TREE_TYPE (expr));
 	      debug_generic_stmt (TREE_TYPE (TREE_OPERAND (expr, 1)));
 	      return true;
@@ -3186,16 +3181,14 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 	      && (TREE_CODE (op) == SSA_NAME
 		  || is_gimple_min_invariant (op)))
 	    {
-	      error ("conversion of %qs on the left hand side of %qs",
-		     get_tree_code_name (TREE_CODE (op)), code_name);
+	      error ("conversion of an SSA_NAME on the left hand side");
 	      debug_generic_stmt (expr);
 	      return true;
 	    }
 	  else if (TREE_CODE (op) == SSA_NAME
 		   && TYPE_SIZE (TREE_TYPE (expr)) != TYPE_SIZE (TREE_TYPE (op)))
 	    {
-	      error ("conversion of register to a different size in %qs",
-		     code_name);
+	      error ("conversion of register to a different size");
 	      debug_generic_stmt (expr);
 	      return true;
 	    }
@@ -3206,22 +3199,20 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
       expr = op;
     }
 
-  code_name = get_tree_code_name (TREE_CODE (expr));
-
   if (TREE_CODE (expr) == MEM_REF)
     {
       if (!is_gimple_mem_ref_addr (TREE_OPERAND (expr, 0))
 	  || (TREE_CODE (TREE_OPERAND (expr, 0)) == ADDR_EXPR
 	      && verify_address (TREE_OPERAND (expr, 0), false)))
 	{
-	  error ("invalid address operand in %qs", code_name);
+	  error ("invalid address operand in MEM_REF");
 	  debug_generic_stmt (expr);
 	  return true;
 	}
       if (!poly_int_tree_p (TREE_OPERAND (expr, 1))
 	  || !POINTER_TYPE_P (TREE_TYPE (TREE_OPERAND (expr, 1))))
 	{
-	  error ("invalid offset operand in %qs", code_name);
+	  error ("invalid offset operand in MEM_REF");
 	  debug_generic_stmt (expr);
 	  return true;
 	}
@@ -3233,21 +3224,21 @@ verify_types_in_gimple_reference (tree expr, bool require_lvalue)
 	  || (TREE_CODE (TMR_BASE (expr)) == ADDR_EXPR
 	      && verify_address (TMR_BASE (expr), false)))
 	{
-	  error ("invalid address operand in %qs", code_name);
+	  error ("invalid address operand in TARGET_MEM_REF");
 	  return true;
 	}
       if (!TMR_OFFSET (expr)
 	  || !poly_int_tree_p (TMR_OFFSET (expr))
 	  || !POINTER_TYPE_P (TREE_TYPE (TMR_OFFSET (expr))))
 	{
-	  error ("invalid offset operand in %qs", code_name);
+	  error ("invalid offset operand in TARGET_MEM_REF");
 	  debug_generic_stmt (expr);
 	  return true;
 	}
     }
   else if (TREE_CODE (expr) == INDIRECT_REF)
     {
-      error ("%qs in gimple IL", code_name);
+      error ("INDIRECT_REF in gimple IL");
       debug_generic_stmt (expr);
       return true;
     }
@@ -3354,7 +3345,7 @@ verify_gimple_call (gcall *stmt)
       && gimple_call_noreturn_p (stmt)
       && should_remove_lhs_p (lhs))
     {
-      error ("LHS in %<noreturn%> call");
+      error ("LHS in noreturn call");
       return true;
     }
 
@@ -3545,8 +3536,6 @@ verify_gimple_assign_unary (gassign *stmt)
       return true;
     }
 
-  const char* const code_name = get_tree_code_name (rhs_code);
-
   /* First handle conversions.  */
   switch (rhs_code)
     {
@@ -3674,7 +3663,7 @@ verify_gimple_assign_unary (gassign *stmt)
 	  || maybe_ne (2 * TYPE_VECTOR_SUBPARTS (lhs_type),
 		       TYPE_VECTOR_SUBPARTS (rhs1_type)))
 	{
-	  error ("type mismatch in %qs expression", code_name);
+	  error ("type mismatch in vector unpack expression");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  return true;
@@ -3696,7 +3685,7 @@ verify_gimple_assign_unary (gassign *stmt)
 	  || TYPE_UNSIGNED (rhs1_type)
 	  || element_precision (lhs_type) != element_precision (rhs1_type))
 	{
-	  error ("invalid types for %qs", code_name);
+	  error ("invalid types for ABSU_EXPR");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  return true;
@@ -3707,7 +3696,7 @@ verify_gimple_assign_unary (gassign *stmt)
       if (TREE_CODE (lhs_type) != VECTOR_TYPE
 	  || !useless_type_conversion_p (TREE_TYPE (lhs_type), rhs1_type))
 	{
-	  error ("%qs should be from a scalar to a like vector", code_name);
+	  error ("vec_duplicate should be from a scalar to a like vector");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  return true;
@@ -3757,8 +3746,6 @@ verify_gimple_assign_binary (gassign *stmt)
       return true;
     }
 
-  const char* const code_name = get_tree_code_name (rhs_code);
-
   /* First handle operations that involve different types.  */
   switch (rhs_code)
     {
@@ -3770,7 +3757,7 @@ verify_gimple_assign_binary (gassign *stmt)
 	    || !(INTEGRAL_TYPE_P (rhs2_type)
 	         || SCALAR_FLOAT_TYPE_P (rhs2_type)))
 	  {
-	    error ("type mismatch in %qs", code_name);
+	    error ("type mismatch in complex expression");
 	    debug_generic_expr (lhs_type);
 	    debug_generic_expr (rhs1_type);
 	    debug_generic_expr (rhs2_type);
@@ -3799,7 +3786,7 @@ verify_gimple_assign_binary (gassign *stmt)
 		     && INTEGRAL_TYPE_P (TREE_TYPE (rhs2_type))))
 	    || !useless_type_conversion_p (lhs_type, rhs1_type))
 	  {
-	    error ("type mismatch in %qs", code_name);
+	    error ("type mismatch in shift expression");
 	    debug_generic_expr (lhs_type);
 	    debug_generic_expr (rhs1_type);
 	    debug_generic_expr (rhs2_type);
@@ -3816,7 +3803,7 @@ verify_gimple_assign_binary (gassign *stmt)
             || TREE_CODE (rhs2) != INTEGER_CST
             || (2 * TYPE_PRECISION (rhs1_type) > TYPE_PRECISION (lhs_type)))
           {
-	    error ("type mismatch in %qs", code_name);
+            error ("type mismatch in widening vector shift expression");
             debug_generic_expr (lhs_type);
             debug_generic_expr (rhs1_type);
             debug_generic_expr (rhs2_type);
@@ -3837,7 +3824,7 @@ verify_gimple_assign_binary (gassign *stmt)
             || (2 * TYPE_PRECISION (TREE_TYPE (rhs1_type))
                 > TYPE_PRECISION (TREE_TYPE (lhs_type))))
           {
-	    error ("type mismatch in %qs", code_name);
+            error ("type mismatch in widening vector shift expression");
             debug_generic_expr (lhs_type);
             debug_generic_expr (rhs1_type);
             debug_generic_expr (rhs2_type);
@@ -3858,7 +3845,7 @@ verify_gimple_assign_binary (gassign *stmt)
 	    if (TREE_CODE (rhs1_type) != VECTOR_TYPE
 		|| TREE_CODE (rhs2_type) != VECTOR_TYPE)
 	      {
-		error ("invalid non-vector operands to %qs", code_name);
+		error ("invalid non-vector operands to vector valued plus");
 		return true;
 	      }
 	    lhs_etype = TREE_TYPE (lhs_type);
@@ -3869,7 +3856,7 @@ verify_gimple_assign_binary (gassign *stmt)
 	    || POINTER_TYPE_P (rhs1_etype)
 	    || POINTER_TYPE_P (rhs2_etype))
 	  {
-	    error ("invalid (pointer) operands %qs", code_name);
+	    error ("invalid (pointer) operands to plus/minus");
 	    return true;
 	  }
 
@@ -3883,7 +3870,7 @@ verify_gimple_assign_binary (gassign *stmt)
 	    || !useless_type_conversion_p (lhs_type, rhs1_type)
 	    || !ptrofftype_p (rhs2_type))
 	  {
-	    error ("type mismatch in %qs", code_name);
+	    error ("type mismatch in pointer plus expression");
 	    debug_generic_stmt (lhs_type);
 	    debug_generic_stmt (rhs1_type);
 	    debug_generic_stmt (rhs2_type);
@@ -3904,7 +3891,7 @@ verify_gimple_assign_binary (gassign *stmt)
 	    || TYPE_UNSIGNED (lhs_type)
 	    || TYPE_PRECISION (lhs_type) != TYPE_PRECISION (rhs1_type))
 	  {
-	    error ("type mismatch in %qs", code_name);
+	    error ("type mismatch in pointer diff expression");
 	    debug_generic_stmt (lhs_type);
 	    debug_generic_stmt (rhs1_type);
 	    debug_generic_stmt (rhs2_type);
@@ -3958,7 +3945,7 @@ verify_gimple_assign_binary (gassign *stmt)
 	    || maybe_lt (GET_MODE_SIZE (element_mode (rhs2_type)),
 			 2 * GET_MODE_SIZE (element_mode (rhs1_type))))
           {
-	    error ("type mismatch in %qs", code_name);
+            error ("type mismatch in widening sum reduction");
             debug_generic_expr (lhs_type);
             debug_generic_expr (rhs1_type);
             debug_generic_expr (rhs2_type);
@@ -3978,7 +3965,7 @@ verify_gimple_assign_binary (gassign *stmt)
 	    || maybe_ne (GET_MODE_SIZE (element_mode (lhs_type)),
 			 2 * GET_MODE_SIZE (element_mode (rhs1_type))))
           {
-	    error ("type mismatch in %qs", code_name);
+            error ("type mismatch in vector widening multiplication");
             debug_generic_expr (lhs_type);
             debug_generic_expr (rhs1_type);
             debug_generic_expr (rhs2_type);
@@ -4014,7 +4001,7 @@ verify_gimple_assign_binary (gassign *stmt)
 	    || maybe_ne (2 * TYPE_VECTOR_SUBPARTS (rhs1_type),
 			 TYPE_VECTOR_SUBPARTS (lhs_type)))
           {
-	    error ("type mismatch in %qs", code_name);
+            error ("type mismatch in vector pack expression");
             debug_generic_expr (lhs_type);
             debug_generic_expr (rhs1_type);
             debug_generic_expr (rhs2_type);
@@ -4035,7 +4022,7 @@ verify_gimple_assign_binary (gassign *stmt)
 	  || maybe_ne (2 * TYPE_VECTOR_SUBPARTS (rhs1_type),
 		       TYPE_VECTOR_SUBPARTS (lhs_type)))
 	{
-	  error ("type mismatch in %qs", code_name);
+	  error ("type mismatch in vector pack expression");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  debug_generic_expr (rhs2_type);
@@ -4067,7 +4054,7 @@ verify_gimple_assign_binary (gassign *stmt)
     case VEC_SERIES_EXPR:
       if (!useless_type_conversion_p (rhs1_type, rhs2_type))
 	{
-	  error ("type mismatch in %qs", code_name);
+	  error ("type mismatch in series expression");
 	  debug_generic_expr (rhs1_type);
 	  debug_generic_expr (rhs2_type);
 	  return true;
@@ -4075,7 +4062,7 @@ verify_gimple_assign_binary (gassign *stmt)
       if (TREE_CODE (lhs_type) != VECTOR_TYPE
 	  || !useless_type_conversion_p (TREE_TYPE (lhs_type), rhs1_type))
 	{
-	  error ("vector type expected in %qs", code_name);
+	  error ("vector type expected in series expression");
 	  debug_generic_expr (lhs_type);
 	  return true;
 	}
@@ -4129,8 +4116,6 @@ verify_gimple_assign_ternary (gassign *stmt)
       return true;
     }
 
-  const char* const code_name = get_tree_code_name (rhs_code);
-
   /* First handle operations that involve different types.  */
   switch (rhs_code)
     {
@@ -4143,7 +4128,7 @@ verify_gimple_assign_ternary (gassign *stmt)
 	  || 2 * TYPE_PRECISION (rhs1_type) > TYPE_PRECISION (lhs_type)
 	  || TYPE_PRECISION (rhs1_type) != TYPE_PRECISION (rhs2_type))
 	{
-	  error ("type mismatch in %qs", code_name);
+	  error ("type mismatch in widening multiply-accumulate expression");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  debug_generic_expr (rhs2_type);
@@ -4157,9 +4142,9 @@ verify_gimple_assign_ternary (gassign *stmt)
 	  || maybe_ne (TYPE_VECTOR_SUBPARTS (rhs1_type),
 		       TYPE_VECTOR_SUBPARTS (lhs_type)))
 	{
-	  error ("the first argument of a %qs must be of a "
+	  error ("the first argument of a VEC_COND_EXPR must be of a "
 		 "boolean vector type of the same number of elements "
-		 "as the result", code_name);
+		 "as the result");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  return true;
@@ -4175,7 +4160,7 @@ verify_gimple_assign_ternary (gassign *stmt)
       if (!useless_type_conversion_p (lhs_type, rhs2_type)
 	  || !useless_type_conversion_p (lhs_type, rhs3_type))
 	{
-	  error ("type mismatch in %qs", code_name);
+	  error ("type mismatch in conditional expression");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs2_type);
 	  debug_generic_expr (rhs3_type);
@@ -4187,7 +4172,7 @@ verify_gimple_assign_ternary (gassign *stmt)
       if (!useless_type_conversion_p (lhs_type, rhs1_type)
 	  || !useless_type_conversion_p (lhs_type, rhs2_type))
 	{
-	  error ("type mismatch in %qs", code_name);
+	  error ("type mismatch in vector permute expression");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  debug_generic_expr (rhs2_type);
@@ -4199,7 +4184,7 @@ verify_gimple_assign_ternary (gassign *stmt)
 	  || TREE_CODE (rhs2_type) != VECTOR_TYPE
 	  || TREE_CODE (rhs3_type) != VECTOR_TYPE)
 	{
-	  error ("vector types expected in %qs", code_name);
+	  error ("vector types expected in vector permute expression");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  debug_generic_expr (rhs2_type);
@@ -4214,8 +4199,8 @@ verify_gimple_assign_ternary (gassign *stmt)
 	  || maybe_ne (TYPE_VECTOR_SUBPARTS (rhs3_type),
 		       TYPE_VECTOR_SUBPARTS (lhs_type)))
 	{
-	  error ("vectors with different element number found in %qs",
-		 code_name);
+	  error ("vectors with different element number found "
+		 "in vector permute expression");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  debug_generic_expr (rhs2_type);
@@ -4230,7 +4215,7 @@ verify_gimple_assign_ternary (gassign *stmt)
 		  != GET_MODE_BITSIZE (SCALAR_TYPE_MODE
 				       (TREE_TYPE (rhs1_type))))))
 	{
-	  error ("invalid mask type in %qs", code_name);
+	  error ("invalid mask type in vector permute expression");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  debug_generic_expr (rhs2_type);
@@ -4246,7 +4231,7 @@ verify_gimple_assign_ternary (gassign *stmt)
 	  || 2 * GET_MODE_UNIT_BITSIZE (TYPE_MODE (TREE_TYPE (rhs1_type)))
 	       > GET_MODE_UNIT_BITSIZE (TYPE_MODE (TREE_TYPE (lhs_type))))
 	{
-	  error ("type mismatch in %qs", code_name);
+	  error ("type mismatch in sad expression");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  debug_generic_expr (rhs2_type);
@@ -4258,7 +4243,7 @@ verify_gimple_assign_ternary (gassign *stmt)
 	  || TREE_CODE (rhs2_type) != VECTOR_TYPE
 	  || TREE_CODE (rhs3_type) != VECTOR_TYPE)
 	{
-	  error ("vector types expected in %qs", code_name);
+	  error ("vector types expected in sad expression");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  debug_generic_expr (rhs2_type);
@@ -4271,7 +4256,7 @@ verify_gimple_assign_ternary (gassign *stmt)
     case BIT_INSERT_EXPR:
       if (! useless_type_conversion_p (lhs_type, rhs1_type))
 	{
-	  error ("type mismatch in %qs", code_name);
+	  error ("type mismatch in BIT_INSERT_EXPR");
 	  debug_generic_expr (lhs_type);
 	  debug_generic_expr (rhs1_type);
 	  return true;
@@ -4290,7 +4275,7 @@ verify_gimple_assign_ternary (gassign *stmt)
 				TYPE_VECTOR_SUBPARTS (rhs2_type))
 		 && multiple_of_p (bitsizetype, rhs3, TYPE_SIZE (rhs2_type)))))
 	{
-	  error ("not allowed type combination in %qs", code_name);
+	  error ("not allowed type combination in BIT_INSERT_EXPR");
 	  debug_generic_expr (rhs1_type);
 	  debug_generic_expr (rhs2_type);
 	  return true;
@@ -4299,13 +4284,13 @@ verify_gimple_assign_ternary (gassign *stmt)
 	  || ! types_compatible_p (bitsizetype, TREE_TYPE (rhs3))
 	  || ! tree_fits_uhwi_p (TYPE_SIZE (rhs2_type)))
 	{
-	  error ("invalid position or size in %qs", code_name);
+	  error ("invalid position or size in BIT_INSERT_EXPR");
 	  return true;
 	}
       if (INTEGRAL_TYPE_P (rhs1_type)
 	  && !type_has_mode_precision_p (rhs1_type))
 	{
-	  error ("%qs into non-mode-precision operand", code_name);
+	  error ("BIT_INSERT_EXPR into non-mode-precision operand");
 	  return true;
 	}
       if (INTEGRAL_TYPE_P (rhs1_type))
@@ -4315,7 +4300,7 @@ verify_gimple_assign_ternary (gassign *stmt)
 	      || (bitpos + TYPE_PRECISION (rhs2_type)
 		  > TYPE_PRECISION (rhs1_type)))
 	    {
-	      error ("insertion out of range in %qs", code_name);
+	      error ("insertion out of range in BIT_INSERT_EXPR");
 	      return true;
 	    }
 	}
@@ -4325,7 +4310,7 @@ verify_gimple_assign_ternary (gassign *stmt)
 	  unsigned HOST_WIDE_INT bitsize = tree_to_uhwi (TYPE_SIZE (rhs2_type));
 	  if (bitpos % bitsize != 0)
 	    {
-	      error ("%qs not at element boundary", code_name);
+	      error ("vector insertion not at element boundary");
 	      return true;
 	    }
 	}
@@ -4344,7 +4329,7 @@ verify_gimple_assign_ternary (gassign *stmt)
 	    || maybe_lt (GET_MODE_SIZE (element_mode (rhs3_type)),
 			 2 * GET_MODE_SIZE (element_mode (rhs1_type))))
           {
-	    error ("type mismatch in %qs", code_name);
+            error ("type mismatch in dot product reduction");
             debug_generic_expr (lhs_type);
             debug_generic_expr (rhs1_type);
             debug_generic_expr (rhs2_type);
@@ -4376,11 +4361,9 @@ verify_gimple_assign_single (gassign *stmt)
   tree rhs1_type = TREE_TYPE (rhs1);
   bool res = false;
 
-  const char* const code_name = get_tree_code_name (rhs_code);
-
   if (!useless_type_conversion_p (lhs_type, rhs1_type))
     {
-      error ("non-trivial conversion in %qs", code_name);
+      error ("non-trivial conversion at assignment");
       debug_generic_expr (lhs_type);
       debug_generic_expr (rhs1_type);
       return true;
@@ -4389,8 +4372,7 @@ verify_gimple_assign_single (gassign *stmt)
   if (gimple_clobber_p (stmt)
       && !(DECL_P (lhs) || TREE_CODE (lhs) == MEM_REF))
     {
-      error ("%qs LHS in clobber statement",
-	     get_tree_code_name (TREE_CODE (lhs)));
+      error ("non-decl/MEM_REF LHS in clobber statement");
       debug_generic_expr (lhs);
       return true;
     }
@@ -4408,7 +4390,7 @@ verify_gimple_assign_single (gassign *stmt)
 	tree op = TREE_OPERAND (rhs1, 0);
 	if (!is_gimple_addressable (op))
 	  {
-	    error ("invalid operand in %qs", code_name);
+	    error ("invalid operand in unary expression");
 	    return true;
 	  }
 
@@ -4422,7 +4404,7 @@ verify_gimple_assign_single (gassign *stmt)
 	    && !one_pointer_to_useless_type_conversion_p (TREE_TYPE (rhs1),
 							  TREE_TYPE (op)))
 	  {
-	    error ("type mismatch in %qs", code_name);
+	    error ("type mismatch in address expression");
 	    debug_generic_stmt (TREE_TYPE (rhs1));
 	    debug_generic_stmt (TREE_TYPE (op));
 	    return true;
@@ -4434,7 +4416,7 @@ verify_gimple_assign_single (gassign *stmt)
 
     /* tcc_reference  */
     case INDIRECT_REF:
-      error ("%qs in gimple IL", code_name);
+      error ("INDIRECT_REF in gimple IL");
       return true;
 
     case COMPONENT_REF:
@@ -4449,7 +4431,7 @@ verify_gimple_assign_single (gassign *stmt)
       if (!is_gimple_reg (lhs)
 	  && is_gimple_reg_type (TREE_TYPE (lhs)))
 	{
-	  error ("invalid RHS for gimple memory store: %qs", code_name);
+	  error ("invalid rhs for gimple memory store");
 	  debug_generic_stmt (lhs);
 	  debug_generic_stmt (rhs1);
 	  return true;
@@ -4475,7 +4457,7 @@ verify_gimple_assign_single (gassign *stmt)
 	  && !is_gimple_reg (rhs1)
 	  && is_gimple_reg_type (TREE_TYPE (lhs)))
 	{
-	  error ("invalid RHS for gimple memory store: %qs", code_name);
+	  error ("invalid rhs for gimple memory store");
 	  debug_generic_stmt (lhs);
 	  debug_generic_stmt (rhs1);
 	  return true;
@@ -4509,8 +4491,8 @@ verify_gimple_assign_single (gassign *stmt)
 		      if (!useless_type_conversion_p (TREE_TYPE (rhs1_type),
 						      TREE_TYPE (elt_t)))
 			{
-			  error ("incorrect type of vector %qs elements",
-				 code_name);
+			  error ("incorrect type of vector CONSTRUCTOR"
+				 " elements");
 			  debug_generic_stmt (rhs1);
 			  return true;
 			}
@@ -4518,8 +4500,8 @@ verify_gimple_assign_single (gassign *stmt)
 					 * TYPE_VECTOR_SUBPARTS (elt_t),
 					 TYPE_VECTOR_SUBPARTS (rhs1_type)))
 			{
-			  error ("incorrect number of vector %qs elements",
-				 code_name);
+			  error ("incorrect number of vector CONSTRUCTOR"
+				 " elements");
 			  debug_generic_stmt (rhs1);
 			  return true;
 			}
@@ -4527,16 +4509,14 @@ verify_gimple_assign_single (gassign *stmt)
 		  else if (!useless_type_conversion_p (TREE_TYPE (rhs1_type),
 						       elt_t))
 		    {
-		      error ("incorrect type of vector %qs elements",
-			     code_name);
+		      error ("incorrect type of vector CONSTRUCTOR elements");
 		      debug_generic_stmt (rhs1);
 		      return true;
 		    }
 		  else if (maybe_gt (CONSTRUCTOR_NELTS (rhs1),
 				     TYPE_VECTOR_SUBPARTS (rhs1_type)))
 		    {
-		      error ("incorrect number of vector %qs elements",
-			     code_name);
+		      error ("incorrect number of vector CONSTRUCTOR elements");
 		      debug_generic_stmt (rhs1);
 		      return true;
 		    }
@@ -4552,15 +4532,13 @@ verify_gimple_assign_single (gassign *stmt)
 		      || TREE_CODE (elt_i) != INTEGER_CST
 		      || compare_tree_int (elt_i, i) != 0))
 		{
-		  error ("vector %qs with non-NULL element index",
-			 code_name);
+		  error ("vector CONSTRUCTOR with non-NULL element index");
 		  debug_generic_stmt (rhs1);
 		  return true;
 		}
 	      if (!is_gimple_val (elt_v))
 		{
-		  error ("vector %qs element is not a GIMPLE value",
-			 code_name);
+		  error ("vector CONSTRUCTOR element is not a GIMPLE value");
 		  debug_generic_stmt (rhs1);
 		  return true;
 		}
@@ -4568,7 +4546,7 @@ verify_gimple_assign_single (gassign *stmt)
 	}
       else if (CONSTRUCTOR_NELTS (rhs1) != 0)
 	{
-	  error ("non-vector %qs with elements", code_name);
+	  error ("non-vector CONSTRUCTOR with elements");
 	  debug_generic_stmt (rhs1);
 	  return true;
 	}
@@ -4579,7 +4557,7 @@ verify_gimple_assign_single (gassign *stmt)
       rhs1 = fold (ASSERT_EXPR_COND (rhs1));
       if (rhs1 == boolean_false_node)
 	{
-	  error ("%qs with an always-false condition", code_name);
+	  error ("ASSERT_EXPR with an always-false condition");
 	  debug_generic_stmt (rhs1);
 	  return true;
 	}
@@ -4726,7 +4704,7 @@ verify_gimple_switch (gswitch *stmt)
 
       if (CASE_CHAIN (elt))
 	{
-	  error ("invalid %<CASE_CHAIN%>");
+	  error ("invalid CASE_CHAIN");
 	  debug_generic_expr (elt);
 	  return true;
 	}
@@ -4820,7 +4798,7 @@ verify_gimple_label (glabel *stmt)
       && (uid == -1
 	  || (*label_to_block_map_for_fn (cfun))[uid] != gimple_bb (stmt)))
     {
-      error ("incorrect entry in %<label_to_block_map%>");
+      error ("incorrect entry in label_to_block_map");
       err |= true;
     }
 
@@ -4937,7 +4915,7 @@ verify_gimple_phi (gphi *phi)
 
   if (!phi_result)
     {
-      error ("invalid %<PHI%> result");
+      error ("invalid PHI result");
       return true;
     }
 
@@ -4946,7 +4924,7 @@ verify_gimple_phi (gphi *phi)
       || (virtual_p
 	  && SSA_NAME_VAR (phi_result) != gimple_vop (cfun)))
     {
-      error ("invalid %<PHI%> result");
+      error ("invalid PHI result");
       err = true;
     }
 
@@ -4956,7 +4934,7 @@ verify_gimple_phi (gphi *phi)
 
       if (!t)
 	{
-	  error ("missing %<PHI%> def");
+	  error ("missing PHI def");
 	  err |= true;
 	  continue;
 	}
@@ -4970,14 +4948,14 @@ verify_gimple_phi (gphi *phi)
 	       || (!virtual_p
 		   && !is_gimple_val (t)))
 	{
-	  error ("invalid %<PHI%> argument");
+	  error ("invalid PHI argument");
 	  debug_generic_expr (t);
 	  err |= true;
 	}
 #ifdef ENABLE_TYPES_CHECKING
       if (!useless_type_conversion_p (TREE_TYPE (phi_result), TREE_TYPE (t)))
 	{
-	  error ("incompatible types in %<PHI%> argument %u", i);
+	  error ("incompatible types in PHI argument %u", i);
 	  debug_generic_stmt (TREE_TYPE (phi_result));
 	  debug_generic_stmt (TREE_TYPE (t));
 	  err |= true;
@@ -5075,7 +5053,7 @@ verify_gimple_in_seq (gimple_seq stmts)
 {
   timevar_push (TV_TREE_STMT_VERIFY);
   if (verify_gimple_in_seq_2 (stmts))
-    internal_error ("%<verify_gimple%> failed");
+    internal_error ("verify_gimple failed");
   timevar_pop (TV_TREE_STMT_VERIFY);
 }
 
@@ -5132,7 +5110,7 @@ verify_eh_throw_stmt_node (gimple *const &stmt, const int &,
 {
   if (!visited->contains (stmt))
     {
-      error ("dead statement in EH table");
+      error ("dead STMT in EH table");
       debug_gimple_stmt (stmt);
       eh_error_found = true;
     }
@@ -5255,14 +5233,6 @@ collect_subblocks (hash_set<tree> *blocks, tree block)
       collect_subblocks (blocks, t);
     }
 }
-
-/* Disable warnings about missing quoting in GCC diagnostics for
-   the verification errors.  Their format strings don't follow
-   GCC diagnostic conventions and trigger an ICE in the end.  */
-#if __GNUC__ >= 10
-#  pragma GCC diagnostic push
-#  pragma GCC diagnostic ignored "-Wformat-diag"
-#endif
 
 /* Verify the GIMPLE statements in the CFG of FN.  */
 
@@ -5741,9 +5711,6 @@ gimple_verify_flow_info (void)
   return err;
 }
 
-#if __GNUC__ >= 10
-#  pragma GCC diagnostic pop
-#endif
 
 /* Updates phi nodes after creating a forwarder block joined
    by edge FALLTHRU.  */
@@ -8932,11 +8899,10 @@ struct cfg_hooks gimple_cfg_hooks = {
 };
 
 
-/* Split all critical edges.  Split some extra (not necessarily critical) edges
-   if FOR_EDGE_INSERTION_P is true.  */
+/* Split all critical edges.  */
 
 unsigned int
-split_critical_edges (bool for_edge_insertion_p /* = false */)
+split_critical_edges (void)
 {
   basic_block bb;
   edge e;
@@ -8959,12 +8925,11 @@ split_critical_edges (bool for_edge_insertion_p /* = false */)
 	     end by control flow statements, such as RESX.
 	     Go ahead and split them too.  This matches the logic in
 	     gimple_find_edge_insert_loc.  */
-	  else if (for_edge_insertion_p
-		   && (!single_pred_p (e->dest)
-		       || !gimple_seq_empty_p (phi_nodes (e->dest))
-		       || e->dest == EXIT_BLOCK_PTR_FOR_FN (cfun))
+	  else if ((!single_pred_p (e->dest)
+	            || !gimple_seq_empty_p (phi_nodes (e->dest))
+		    || e->dest == EXIT_BLOCK_PTR_FOR_FN (cfun))
 		   && e->src != ENTRY_BLOCK_PTR_FOR_FN (cfun)
-		   && !(e->flags & EDGE_ABNORMAL))
+	           && !(e->flags & EDGE_ABNORMAL))
 	    {
 	      gimple_stmt_iterator gsi;
 
@@ -9448,13 +9413,13 @@ do_warn_unused_result (gimple_seq seq)
 
 	      if (fdecl)
 		warning_at (loc, OPT_Wunused_result,
-			    "ignoring return value of %qD "
-			    "declared with attribute %<warn_unused_result%>",
+			    "ignoring return value of %qD, "
+			    "declared with attribute warn_unused_result",
 			    fdecl);
 	      else
 		warning_at (loc, OPT_Wunused_result,
 			    "ignoring return value of function "
-			    "declared with attribute %<warn_unused_result%>");
+			    "declared with attribute warn_unused_result");
 	    }
 	  break;
 

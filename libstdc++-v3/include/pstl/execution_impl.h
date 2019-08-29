@@ -66,7 +66,7 @@ struct __is_random_access_iterator<_IteratorType>
 };
 
 /* policy */
-template <typename _Policy>
+template <typename Policy>
 struct __policy_traits
 {
 };

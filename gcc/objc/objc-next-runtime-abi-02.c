@@ -241,10 +241,8 @@ objc_next_runtime_abi_02_init (objc_runtime_hooks *rthooks)
 
   if (flag_objc_exceptions && flag_objc_sjlj_exceptions)
     {
-      inform (UNKNOWN_LOCATION,
-	      "%<-fobjc-sjlj-exceptions%> is ignored for "
-	      "%<-fnext-runtime%> when %<-fobjc-abi-version%> "
-	      "greater than 1");
+      inform (UNKNOWN_LOCATION, "%<-fobjc-sjlj-exceptions%> is ignored for "
+				"%<-fnext-runtime%> when %<-fobjc-abi-version%> >= 2");
       flag_objc_sjlj_exceptions = 0;
     }
 

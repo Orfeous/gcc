@@ -3,7 +3,7 @@
 // wrong for some fields.
 
 // { dg-do run }
-// { dg-xfail-run-if "AIX/Darwin ABI increases struct alignment for first member double" { powerpc-ibm-aix* || { ilp32 && powerpc-*-darwin* } } }
+// { dg-xfail-run-if "AIX ABI increases struct alignment for first member double" { powerpc-ibm-aix* } }
 
 extern "C" void abort();
 
